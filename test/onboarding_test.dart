@@ -130,6 +130,38 @@ void main() {
     });
   });
 
+  group('Small screen layout', () {
+    testWidgets('onboarding screens fit without overflow', (tester) async {
+      tester.view.physicalSize = const Size(360, 520);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(home: WelcomeScreen(onStart: () {})),
+      );
+      await tester.pump();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CreateTripScreen(onBack: () {}, onContinue: (_) {}),
+        ),
+      );
+      await tester.pump();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: InviteCrewScreen(
+            onBack: () {},
+            draft: const TripDraft(name: 'x'),
+            onOpenDiary: (_, __) {},
+          ),
+        ),
+      );
+      await tester.pump();
+    });
+  });
+
   group('OnboardingFlow', () {
     testWidgets('walks through welcome → create → invite → main shell', (
       tester,

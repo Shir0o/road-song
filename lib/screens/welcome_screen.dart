@@ -15,7 +15,7 @@ class WelcomeScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: BrutalTheme.backgroundLight,
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(28, 28, 28, 46),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -40,7 +40,9 @@ class WelcomeScreen extends StatelessWidget {
                   color: BrutalTheme.inkBlack,
                 ),
               ),
-              Expanded(
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 220,
                 child: Stack(
                   children: [
                     Positioned(

@@ -112,7 +112,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     return Scaffold(
       backgroundColor: BrutalTheme.backgroundLight,
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 46),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -212,7 +212,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                   );
                 }),
               ),
-              const Spacer(),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: BrutalButton(
