@@ -1,7 +1,7 @@
 # Road Song
 
 [![Flutter CI](https://github.com/Shir0o/road-song/workflows/Flutter%20CI/badge.svg)](https://github.com/Shir0o/road-song/actions/workflows/flutter_ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 A chaotic, high-contrast **Neo-Brutalist** Flutter application built to log messy trips, capture typewriter logs, gather evidence (receipts, notes, photos), and synthesize audio tracks from trip vibes.
 
@@ -92,4 +92,4 @@ We welcome contributions of all forms! Please refer to these guidelines to get s
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
