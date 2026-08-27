@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme.dart';
 import 'models/trip_models.dart';
+import 'services/session_ingestion_service.dart';
 import 'screens/scrapbook_screen.dart';
 import 'screens/typewriter_screen.dart';
 import 'screens/evidence_screen.dart';
@@ -42,9 +43,12 @@ class OnboardingFlow extends StatefulWidget {
 }
 
 class _OnboardingFlowState extends State<OnboardingFlow> {
+  static const SessionIngestionService _service = SessionIngestionService();
+
   int _step = 0; // 0: welcome, 1: create, 2: invite, 3: main
   TripDraft _draft = const TripDraft();
   List<CrewMember> _crew = kDefaultCrew;
+  final TripStore _tripStore = TripStore();
 
   void _goToCreate() => setState(() => _step = 1);
 
@@ -60,6 +64,17 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   void _goToCreateFromInvite() => setState(() => _step = 1);
 
   void _openDiary(TripDraft draft, List<CrewMember> crew) {
+    final trip = Trip(
+      id: 'trip-${DateTime.now().millisecondsSinceEpoch}',
+      name: draft.name,
+      firstDay: draft.firstDay,
+      lastDay: draft.lastDay,
+      coverIndex: draft.coverIndex,
+      crew: crew.where((m) => m.invited).toList(),
+      sessionLink: _service.buildSessionLink(draft.name),
+      createdAt: DateTime.now(),
+    );
+    _tripStore.addTrip(trip);
     setState(() {
       _draft = draft;
       _crew = crew;
@@ -84,7 +99,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
           onOpenDiary: _openDiary,
         );
       case 3:
-        return const MainShell();
+        return MainShell(tripStore: _tripStore);
       default:
         return WelcomeScreen(onStart: _goToCreate);
     }
@@ -92,7 +107,9 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
 }
 
 class MainShell extends StatefulWidget {
-  const MainShell({Key? key}) : super(key: key);
+  final TripStore? tripStore;
+
+  const MainShell({Key? key, this.tripStore}) : super(key: key);
 
   @override
   _MainShellState createState() => _MainShellState();
@@ -315,6 +332,7 @@ class _MainShellState extends State<MainShell> {
                 _selectedTrip = tripName;
               });
             },
+            createdTrips: widget.tripStore?.trips ?? const [],
           ),
           BangerScreen(
             onBack: () => _navigateToTab(0), // Back to Scrapbook tab

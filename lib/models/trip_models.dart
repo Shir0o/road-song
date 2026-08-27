@@ -84,3 +84,38 @@ class GuestDrop {
   bool get isPhoto => type == GuestDropType.photo;
   bool get isVideo => type == GuestDropType.video;
 }
+
+/// A fully created trip with its crew and session link.
+class Trip {
+  final String id;
+  final String name;
+  final String firstDay;
+  final String lastDay;
+  final int coverIndex;
+  final List<CrewMember> crew;
+  final String sessionLink;
+  final DateTime createdAt;
+
+  const Trip({
+    required this.id,
+    required this.name,
+    required this.firstDay,
+    required this.lastDay,
+    required this.coverIndex,
+    required this.crew,
+    required this.sessionLink,
+    required this.createdAt,
+  });
+}
+
+/// In-memory store for user-created trips.
+class TripStore extends ChangeNotifier {
+  final List<Trip> _trips = [];
+
+  List<Trip> get trips => List.unmodifiable(_trips);
+
+  void addTrip(Trip trip) {
+    _trips.add(trip);
+    notifyListeners();
+  }
+}

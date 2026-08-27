@@ -10,6 +10,7 @@ import 'package:road_song/screens/welcome_screen.dart';
 import 'package:road_song/screens/create_trip_screen.dart';
 import 'package:road_song/screens/invite_crew_screen.dart';
 import 'package:road_song/services/session_ingestion_service.dart';
+import 'package:road_song/widgets/qr_code_view.dart';
 
 void main() {
   setUpAll(() {
@@ -128,6 +129,38 @@ void main() {
       expect(resultCrew, isNotNull);
       expect(resultCrew!.firstWhere((m) => m.id == 'sam').invited, isTrue);
     });
+
+    testWidgets('guest drop sheet uses ingestion service', (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: InviteCrewScreen(
+            onBack: () {},
+            draft: const TripDraft(name: 'Lisbon Trip'),
+            onOpenDiary: (_, __) {},
+          ),
+        ),
+      );
+
+      await tester.ensureVisible(find.text('DROP A MEMORY'));
+      await tester.tap(find.text('DROP A MEMORY'));
+      await tester.pumpAndSettle();
+      expect(find.text('DROP A MEMORY'), findsNWidgets(2)); // button + sheet title
+
+      await tester.enterText(
+        find.byType(TextField).last,
+        'Best churro ever',
+      );
+      await tester.pump();
+      await tester.tap(find.text('DROP'));
+      await tester.pump();
+
+      expect(find.textContaining('dropped: Best churro ever'), findsOneWidget);
+    });
   });
 
   group('Small screen layout', () {
@@ -183,6 +216,8 @@ void main() {
       await tester.tap(find.text('OPEN THE DIARY →'));
       await tester.pumpAndSettle();
       expect(find.text('YOUR MESSY TRIPS'), findsOneWidget);
+      // The newly created trip is wired into the scrapbook.
+      expect(find.text('CABO REVENGE'), findsOneWidget);
     });
   });
 
@@ -254,6 +289,40 @@ void main() {
     test('extractExifDateTime returns null for invalid input', () {
       expect(service.extractExifDateTime([]), isNull);
       expect(service.extractExifDateTime([0x00, 0x01, 0x02]), isNull);
+    });
+  });
+
+  group('TripStore', () {
+    test('stores created trips', () {
+      final store = TripStore();
+      expect(store.trips, isEmpty);
+
+      store.addTrip(
+        Trip(
+          id: 'trip-1',
+          name: 'Lisbon Trip',
+          firstDay: 'Jun 12',
+          lastDay: 'Jun 18',
+          coverIndex: 1,
+          crew: [],
+          sessionLink: 'roadsong.app/t/lisbon-trip',
+          createdAt: DateTime(2026, 6, 12),
+        ),
+      );
+
+      expect(store.trips, hasLength(1));
+      expect(store.trips.first.name, 'Lisbon Trip');
+    });
+  });
+
+  group('QrCodeView', () {
+    testWidgets('renders a real QR code from data', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: QrCodeView(data: 'roadsong.app/t/lisbon-trip')),
+        ),
+      );
+      expect(find.byType(QrCodeView), findsOneWidget);
     });
   });
 }

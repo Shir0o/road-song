@@ -6,6 +6,7 @@ import '../models/trip_models.dart';
 import '../services/session_ingestion_service.dart';
 import '../theme.dart';
 import '../widgets/brutal_widgets.dart';
+import '../widgets/qr_code_view.dart';
 
 /// Default friend list shown on the invite screen.
 const List<CrewMember> kDefaultCrew = [
@@ -102,6 +103,102 @@ class _InviteCrewScreenState extends State<InviteCrewScreen> {
     });
   }
 
+  void _showGuestDropSheet() {
+    final invited = _crew.where((m) => m.invited).toList();
+    final author = invited.isEmpty ? '@you' : invited.first.handle;
+    final TextEditingController textController = TextEditingController();
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: BrutalCard(
+            color: BrutalTheme.card,
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const DymoLabel(text: 'DROP A MEMORY', fontSize: 16),
+                const SizedBox(height: 12),
+                Text(
+                  'Guest drops land in the shared trip pool with their capture time preserved.',
+                  style: GoogleFonts.karla(
+                    fontSize: 13,
+                    color: BrutalTheme.graphite,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: textController,
+                  maxLines: 3,
+                  style: GoogleFonts.karla(color: BrutalTheme.inkBlack),
+                  decoration: InputDecoration(
+                    hintText: 'Write a quote, joke, or note…',
+                    border: InputBorder.none,
+                    filled: true,
+                    fillColor: BrutalTheme.backgroundLight,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: BrutalButton(
+                        color: BrutalTheme.yellow,
+                        onPressed: () => Navigator.pop(sheetContext),
+                        child: Text(
+                          'CANCEL',
+                          style: GoogleFonts.karla(
+                            fontWeight: FontWeight.bold,
+                            color: BrutalTheme.inkBlack,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: BrutalButton(
+                        onPressed: () {
+                          final drop = _service.createTextDrop(
+                            author: author,
+                            text: textController.text.trim(),
+                          );
+                          Navigator.pop(sheetContext);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: BrutalTheme.primary,
+                              content: Text(
+                                '${drop.author} dropped: ${drop.content}',
+                                style: GoogleFonts.karla(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                        child: Text(
+                          'DROP',
+                          style: GoogleFonts.spaceMono(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -152,6 +249,21 @@ class _InviteCrewScreenState extends State<InviteCrewScreen> {
                       _buildShareLink(),
                       const SizedBox(height: 12),
                       _buildQrPreview(),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: BrutalButton(
+                          color: BrutalTheme.yellow,
+                          onPressed: _showGuestDropSheet,
+                          child: Text(
+                            'DROP A MEMORY',
+                            style: GoogleFonts.spaceMono(
+                              fontWeight: FontWeight.bold,
+                              color: BrutalTheme.inkBlack,
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -335,7 +447,12 @@ class _InviteCrewScreenState extends State<InviteCrewScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          _FakeQrCode(size: 84),
+          QrCodeView(
+            data: _sessionLink,
+            size: 84,
+            darkColor: BrutalTheme.inkBlack,
+            lightColor: BrutalTheme.card,
+          ),
           const SizedBox(height: 6),
           Text(
             'QR code preview',
@@ -345,57 +462,4 @@ class _InviteCrewScreenState extends State<InviteCrewScreen> {
       ),
     );
   }
-}
-
-/// A lightweight decorative QR-style placeholder rendered with a painter.
-class _FakeQrCode extends StatelessWidget {
-  final double size;
-
-  const _FakeQrCode({required this.size});
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(size: Size.square(size), painter: _FakeQrPainter());
-  }
-}
-
-class _FakeQrPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = BrutalTheme.inkBlack;
-    final cell = size.width / 12;
-
-    // Finder patterns in three corners.
-    void drawFinder(double left, double top) {
-      canvas.drawRect(Rect.fromLTWH(left, top, cell * 3, cell * 3), paint);
-      canvas.drawRect(
-        Rect.fromLTWH(left + cell, top + cell, cell, cell),
-        Paint()..color = BrutalTheme.card,
-      );
-    }
-
-    drawFinder(0, 0);
-    drawFinder(size.width - cell * 3, 0);
-    drawFinder(0, size.height - cell * 3);
-
-    // Scattered modules to suggest a QR code.
-    final positions = [
-      (5, 5),
-      (6, 4),
-      (7, 5),
-      (5, 7),
-      (4, 9),
-      (9, 4),
-      (9, 6),
-      (8, 8),
-      (6, 9),
-      (10, 9),
-    ];
-    for (final (col, row) in positions) {
-      canvas.drawRect(Rect.fromLTWH(col * cell, row * cell, cell, cell), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
