@@ -14,9 +14,28 @@ void main() {
     // Build our app and trigger a frame.
     await tester.pumpWidget(const RoadSongApp());
 
+    // Onboarding starts on the Welcome screen.
+    expect(find.text('Road\nSong'), findsOneWidget);
+
+    // Start a trip song -> Create Trip.
+    await tester.tap(find.text('START A TRIP SONG'));
+    await tester.pumpAndSettle();
+    expect(find.text('New trip'), findsOneWidget);
+
+    // Enter a trip name and continue -> Invite Crew.
+    await tester.enterText(find.byType(TextField).first, 'Lisbon Trip');
+    await tester.pump();
+    await tester.tap(find.text('CONTINUE'));
+    await tester.pumpAndSettle();
+    expect(find.text('Who was on the trip?'), findsOneWidget);
+
+    // Open the diary -> Main Shell with Scrapbook.
+    await tester.tap(find.text('OPEN THE DIARY →'));
+    await tester.pumpAndSettle();
+
     // Verify that the title of the scrapbook screen is displayed.
     expect(find.text('YOUR MESSY TRIPS'), findsOneWidget);
-    
+
     // Verify that the navigation icons are present (Scrapbook, Studio, Profile).
     expect(find.byIcon(Icons.book), findsOneWidget);
     expect(find.byIcon(Icons.play_circle), findsOneWidget);

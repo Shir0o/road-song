@@ -108,6 +108,16 @@ void main() {
 
       await tester.pumpWidget(const RoadSongApp());
 
+      // Walk through onboarding before reaching the Main Shell.
+      await tester.tap(find.text('START A TRIP SONG'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, 'Lisbon Trip');
+      await tester.pump();
+      await tester.tap(find.text('CONTINUE'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OPEN THE DIARY →'));
+      await tester.pumpAndSettle();
+
       // 1. We start on Scrapbook tab
       expect(find.text('YOUR MESSY TRIPS'), findsOneWidget);
 
