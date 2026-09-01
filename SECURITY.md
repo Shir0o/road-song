@@ -1,22 +1,18 @@
 # Security Policy
 
-## Supported Versions
-
-We actively support and patch security issues in the following versions of Road Song:
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.0.x   | :white_check_mark: |
-| < 1.0.0 | :x:                |
-
 ## Reporting a Vulnerability
 
-If you discover a potential security vulnerability in this project, please **do not** report it publicly through a GitHub issue or pull request. Instead, report it privately to help protect the community.
+If you discover a security vulnerability in this project, please report it
+responsibly using GitHub's private vulnerability reporting.
 
-Please report security vulnerabilities by emailing us at [shir0o.dev@gmail.com](mailto:shir0o.dev@gmail.com) with:
+1. Go to the **Security** tab of this repository.
+2. Click **Report a vulnerability**.
+3. Fill in the details and submit.
 
-1. A detailed description of the vulnerability.
-2. Steps or a proof-of-concept (PoC) to reproduce the issue.
-3. The impact of the vulnerability and potential mitigation strategies.
+Your report will be reviewed and you will receive a response within 7 days.
+Please do not open public issues for security vulnerabilities.
 
-We will acknowledge receipt of your report within 48 hours and work with you to coordinate a security patch and public disclosure timeline.
+## Supported Versions
+
+Only the latest release on the default branch is actively supported with
+security updates.
