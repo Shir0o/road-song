@@ -10,7 +10,7 @@ void main() {
     HttpOverrides.global = _MockHttpOverrides();
   });
 
-  testWidgets('App smoke test - verifies Scrapbook loads', (WidgetTester tester) async {
+  testWidgets('App smoke test - verifies Diary hub loads', (WidgetTester tester) async {
     // Build our app and trigger a frame.
     await tester.pumpWidget(const RoadSongApp());
 
@@ -29,17 +29,27 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Who was on the trip?'), findsOneWidget);
 
-    // Open the diary -> Main Shell with Scrapbook.
+    // Open the diary -> Main Shell lands on the created trip's Diary tab.
     await tester.tap(find.text('OPEN THE DIARY →'));
     await tester.pumpAndSettle();
 
-    // Verify that the title of the scrapbook screen is displayed.
-    expect(find.text('YOUR MESSY TRIPS'), findsOneWidget);
+    // The empty diary of the freshly created trip is showing.
+    expect(find.text('No memories yet.'), findsOneWidget);
 
-    // Verify that the navigation icons are present (Scrapbook, Studio, Profile).
-    expect(find.byIcon(Icons.book), findsOneWidget);
-    expect(find.byIcon(Icons.play_circle), findsOneWidget);
-    expect(find.byIcon(Icons.person), findsOneWidget);
+    // Verify the Diary / Route / Song navigation is present.
+    expect(find.byIcon(Icons.edit_note), findsOneWidget);
+    expect(find.byIcon(Icons.flag), findsOneWidget);
+    expect(find.byIcon(Icons.music_note), findsOneWidget);
+
+    // Route tab.
+    await tester.tap(find.byIcon(Icons.flag));
+    await tester.pumpAndSettle();
+    expect(find.text('The route'), findsOneWidget);
+
+    // Song tab (studio).
+    await tester.tap(find.byIcon(Icons.music_note));
+    await tester.pumpAndSettle();
+    expect(find.text('THE STUDIO'), findsOneWidget);
   });
 }
 
