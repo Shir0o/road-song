@@ -1,18 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../models/trip_models.dart';
 import '../theme.dart';
 import '../widgets/brutal_widgets.dart';
+
+const List<Color> _createdTripCoverColors = [
+  Color(0xFFF1E7D1),
+  Color(0xFFC05B3E),
+  Color(0xFF3E6B8A),
+  Color(0xFF7D8663),
+  Color(0xFFB08A3E),
+];
 
 class ScrapbookScreen extends StatelessWidget {
   final Function(int) onNavigateToTab;
   final Function(String screenName) onNavigateToDirectScreen;
   final ValueChanged<String> onTripSelected;
+  final List<Trip> createdTrips;
 
   const ScrapbookScreen({
     Key? key,
     required this.onNavigateToTab,
     required this.onNavigateToDirectScreen,
     required this.onTripSelected,
+    this.createdTrips = const [],
   }) : super(key: key);
 
   @override
@@ -58,6 +69,7 @@ class ScrapbookScreen extends StatelessWidget {
                         _buildCaboCard(context),
                         const SizedBox(height: 24),
                         _buildVegasCard(context),
+                        ..._buildCreatedTripCards(context, columnIndex: 0),
                       ],
                     ),
                   ),
@@ -70,6 +82,7 @@ class ScrapbookScreen extends StatelessWidget {
                         _buildMudfestCard(context),
                         const SizedBox(height: 24),
                         _buildRoadtripCard(context),
+                        ..._buildCreatedTripCards(context, columnIndex: 1),
                       ],
                     ),
                   ),
@@ -458,6 +471,70 @@ class ScrapbookScreen extends StatelessWidget {
                     const SizedBox(width: 4),
                     _buildAvatar('https://lh3.googleusercontent.com/aida-public/AB6AXuCI53uuah8dIm4ygtMgHVSURuRqY8f496Lo_brU0Uq3_la6tX7AfZw1I7ThiSJvFtKZrfqLytWNDs9GlP1xGe5niDuccjaI32SkZ2-91LuchjJ__mdsdjonfRcOkB8bCFQk_bV0eYtgAGBsq1UU6F63Pof2WyUOWBKb-_pjRw1XotQX7YsRJl32w5xcf21H6qyAskjV7I6eJqQHWQlMiliI0b_8U9re_WpmvT02zimH0RwZcZ5GMdPoXZ_bauzTwzqPIF27uzXYSpY'),
                   ],
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildCreatedTripCards(
+    BuildContext context, {
+    required int columnIndex,
+  }) {
+    final List<Widget> cards = [];
+    for (int i = 0; i < createdTrips.length; i++) {
+      if (i % 2 == columnIndex) {
+        cards.add(_buildCreatedTripCard(context, createdTrips[i]));
+        cards.add(const SizedBox(height: 24));
+      }
+    }
+    return cards;
+  }
+
+  Widget _buildCreatedTripCard(BuildContext context, Trip trip) {
+    return BrutalCard(
+      color: _createdTripCoverColors[trip.coverIndex % _createdTripCoverColors.length],
+      rotationDegrees: -1.0,
+      hasTape: true,
+      tapeRotationDegrees: 3.0,
+      onTap: () {
+        onTripSelected(trip.name);
+        _showTripOptions(context, trip.name);
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(10.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  trip.name.toUpperCase(),
+                  style: GoogleFonts.instrumentSerif(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: BrutalTheme.inkBlack,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${trip.firstDay} – ${trip.lastDay}',
+                  style: GoogleFonts.karla(
+                    fontSize: 12,
+                    color: BrutalTheme.graphite,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  trip.sessionLink,
+                  style: GoogleFonts.spaceMono(
+                    fontSize: 10,
+                    color: BrutalTheme.graphite,
+                  ),
                 ),
               ],
             ),
