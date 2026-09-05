@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:road_song/main.dart';
+import 'package:road_song/models/trip_models.dart';
 import 'package:road_song/widgets/brutal_widgets.dart';
 import 'package:road_song/screens/typewriter_screen.dart';
 import 'package:road_song/screens/evidence_screen.dart';
@@ -100,15 +101,7 @@ void main() {
   });
 
   group('App Shell & Navigation Tests', () {
-    testWidgets('Tab switching and direct screen navigation', (WidgetTester tester) async {
-      tester.view.physicalSize = const Size(800, 1200);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      await tester.pumpWidget(const RoadSongApp());
-
-      // Walk through onboarding before reaching the Main Shell.
+    Future<void> openCreatedTripDiary(WidgetTester tester) async {
       await tester.tap(find.text('START A TRIP SONG'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).first, 'Lisbon Trip');
@@ -117,68 +110,83 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('OPEN THE DIARY →'));
       await tester.pumpAndSettle();
+    }
 
-      // 1. We start on Scrapbook tab
-      expect(find.text('YOUR MESSY TRIPS'), findsOneWidget);
+    Future<void> switchToDemoTrip(WidgetTester tester, String tripName) async {
+      await tester.tap(find.byKey(const ValueKey('switch-trip')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey('trip-row-$tripName')));
+      await tester.pumpAndSettle();
+    }
 
-      // Tap bottom nav items
-      await tester.tap(find.byIcon(Icons.play_circle));
+    testWidgets('Diary feed, likes and banner navigation to Song', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(const RoadSongApp());
+
+      // Land on the created (empty) trip diary.
+      await openCreatedTripDiary(tester);
+      expect(find.text('No memories yet.'), findsOneWidget);
+
+      // Switch to the canned demo trip to browse a populated diary.
+      await switchToDemoTrip(tester, "Cabo Fail '23");
+      expect(find.text('Day 1'), findsOneWidget);
+      expect(find.text('Day 2'), findsOneWidget);
+      expect(find.text('the churro incident'), findsOneWidget);
+      expect(find.text('3 memories collected — ready to turn them into your song?'), findsOneWidget);
+
+      // Like toggling: mem-1 starts at 12 likes, not liked by me.
+      Finder likeCount(String id) => find.byKey(ValueKey('like-count-$id'));
+      expect(tester.widget<Text>(likeCount('mem-1')).data, '12');
+      await tester.tap(find.byKey(const ValueKey('like-mem-1')));
+      await tester.pump();
+      expect(tester.widget<Text>(likeCount('mem-1')).data, '13');
+      await tester.tap(find.byKey(const ValueKey('like-mem-1')));
+      await tester.pump();
+      expect(tester.widget<Text>(likeCount('mem-1')).data, '12');
+
+      // Banner navigates to the Song tab (studio).
+      await tester.tap(find.byKey(const ValueKey('song-banner')));
       await tester.pumpAndSettle();
       expect(find.text('THE STUDIO'), findsOneWidget);
+    });
 
-      await tester.tap(find.byIcon(Icons.person));
-      await tester.pumpAndSettle();
-      expect(find.text('MY PROFILE'), findsOneWidget);
+    testWidgets('Route tab renders stops, pins, callouts and odometer', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.tap(find.byIcon(Icons.book));
-      await tester.pumpAndSettle();
-      expect(find.text('YOUR MESSY TRIPS'), findsOneWidget);
+      await tester.pumpWidget(const RoadSongApp());
+      await openCreatedTripDiary(tester);
+      await switchToDemoTrip(tester, "Roadtrip '22");
 
-      // Tap FAB on Scrapbook
-      await tester.tap(find.byIcon(Icons.add));
+      // Route tab shows both pinned stops with the distance odometer.
+      await tester.tap(find.byIcon(Icons.flag));
       await tester.pumpAndSettle();
-      expect(find.text('CHAOS INITIALIZED! SELECT A TRIP TO START THE TEA.'), findsOneWidget);
+      expect(find.text('The route'), findsOneWidget);
+      expect(find.text('2 stops · 291 km'), findsOneWidget);
+      expect(find.byKey(const ValueKey('route-pin-mem-road-1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('route-pin-mem-road-2')), findsOneWidget);
 
-      // Open Cabo Fail dialog
-      await tester.tap(find.text("CABO FAIL '23"));
+      // Tapping a pin opens its callout with the memory text.
+      await tester.tap(find.byKey(const ValueKey('route-pin-mem-road-1')));
       await tester.pumpAndSettle();
-      expect(find.text("CABO FAIL '23"), findsNWidgets(2)); // Card + Dialog header
-      
-      // Close dialog option
-      await tester.tap(find.text('[ CLOSE ]'));
-      await tester.pumpAndSettle();
-      expect(find.text('What do you want to edit or view for this trip?'), findsNothing);
+      expect(find.byKey(const ValueKey('pin-callout')), findsOneWidget);
+      expect(find.textContaining('Death Valley'), findsWidgets);
 
-      // Reopen dialog and go to Typewriter
-      await tester.tap(find.text("CABO FAIL '23"));
+      // Tapping the other stop row moves the callout to that memory.
+      await tester.tap(find.byKey(const ValueKey('stop-row-mem-road-2')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('WRITE LYRICS (AI LYRICS)'));
-      await tester.pumpAndSettle();
-      expect(find.text("CABO FAIL '23"), findsOneWidget); // Screen title now
-      
-      // Go back
-      await tester.tap(find.byIcon(Icons.arrow_back));
-      await tester.pumpAndSettle();
-      expect(find.text('YOUR MESSY TRIPS'), findsOneWidget);
+      expect(find.textContaining('concrete dinosaurs'), findsWidgets);
 
-      // Reopen dialog and go to Evidence
-      await tester.tap(find.text("CABO FAIL '23"));
+      // Back to Diary tab via nav bar.
+      await tester.tap(find.byIcon(Icons.edit_note));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('VIEW DIARY & MAP (THE EVIDENCE)'));
-      await tester.pumpAndSettle();
-      expect(find.text("CABO FAIL '23 EVIDENCE"), findsOneWidget);
-
-      // Go back
-      await tester.tap(find.byIcon(Icons.arrow_back));
-      await tester.pumpAndSettle();
-      expect(find.text('YOUR MESSY TRIPS'), findsOneWidget);
-
-      // Reopen dialog and go to Studio tab via dialog option
-      await tester.tap(find.text("CABO FAIL '23"));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('PRODUCE TRACK (AI STUDIO)'));
-      await tester.pumpAndSettle();
-      expect(find.text('THE STUDIO'), findsOneWidget);
+      expect(find.text('Day 1'), findsOneWidget);
     });
   });
 

@@ -199,6 +199,11 @@ void main() {
     testWidgets('walks through welcome → create → invite → main shell', (
       tester,
     ) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
       await tester.pumpWidget(const RoadSongApp());
 
       expect(find.text('Road\nSong'), findsOneWidget);
@@ -215,9 +220,21 @@ void main() {
 
       await tester.tap(find.text('OPEN THE DIARY →'));
       await tester.pumpAndSettle();
-      expect(find.text('YOUR MESSY TRIPS'), findsOneWidget);
-      // The newly created trip is wired into the scrapbook.
+      // The hub opens on the created trip's (empty) diary.
       expect(find.text('CABO REVENGE'), findsOneWidget);
+      expect(find.text('No memories yet.'), findsOneWidget);
+
+      // The created trip is wired into the hub's trip switcher.
+      await tester.tap(find.byKey(const ValueKey('switch-trip')));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('trip-row-Cabo Revenge')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey("trip-row-Cabo Fail '23")),
+        findsOneWidget,
+      );
     });
   });
 

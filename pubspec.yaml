@@ -39,6 +39,7 @@ dependencies:
   shared_preferences: ^2.2.3
   audioplayers: ^6.0.0
   qr: ^3.0.2
+  image_picker: ^1.2.3
 
 dev_dependencies:
   flutter_test:

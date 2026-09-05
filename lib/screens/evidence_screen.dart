@@ -1,52 +1,9 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../models/trip_models.dart';
 import '../theme.dart';
 import '../widgets/brutal_widgets.dart';
-
-class TimelineMemory {
-  final String id;
-  final String time;
-  final String author;
-  final String text;
-  final IconData icon;
-  final Color iconBg;
-  final Color iconColor;
-  final double rotationDegrees;
-  final String? imageUrl;
-  final String? category;
-
-  const TimelineMemory({
-    required this.id,
-    required this.time,
-    required this.author,
-    required this.text,
-    required this.icon,
-    required this.iconBg,
-    this.iconColor = Colors.black,
-    this.rotationDegrees = 0.0,
-    this.imageUrl,
-    this.category,
-  });
-}
-
-class MapPin {
-  final String memoryId;
-  final String label;
-  final double? left;
-  final double? top;
-  final double? right;
-  final double? bottom;
-
-  const MapPin({
-    required this.memoryId,
-    required this.label,
-    this.left,
-    this.top,
-    this.right,
-    this.bottom,
-  });
-}
 
 class EvidenceScreen extends StatefulWidget {
   final VoidCallback onBack;
