@@ -95,11 +95,8 @@ class WelcomeScreen extends StatelessWidget {
                 child: BrutalButton(
                   onPressed: onStart,
                   child: Text(
-                    'START A TRIP SONG',
-                    style: GoogleFonts.spaceMono(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
+                    'Start a trip song',
+                    style: BrutalTheme.ctaLabelStyle(),
                   ),
                 ),
               ),

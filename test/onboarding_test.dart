@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:road_song/main.dart';
@@ -27,9 +28,9 @@ void main() {
 
       expect(find.text('Road\nSong'), findsOneWidget);
       expect(find.text('a scrapbook that sings ♪'), findsOneWidget);
-      expect(find.text('START A TRIP SONG'), findsOneWidget);
+      expect(find.text('Start a trip song'), findsOneWidget);
 
-      await tester.tap(find.text('START A TRIP SONG'));
+      await tester.tap(find.text('Start a trip song'));
       expect(started, isTrue);
     });
   });
@@ -56,7 +57,7 @@ void main() {
       // Pick the second cover swatch.
       await tester.tap(find.byKey(const ValueKey('cover-1')));
       await tester.pump();
-      await tester.tap(find.text('CONTINUE'));
+      await tester.tap(find.text('Continue'));
       await tester.pump();
 
       expect(result, isNotNull);
@@ -65,6 +66,66 @@ void main() {
       expect(result!.lastDay, 'Jun 18');
       expect(result!.coverIndex, 1);
       expect(backed, isFalse);
+    });
+
+    testWidgets('Continue is blocked until a trip name is entered',
+        (tester) async {
+      TripDraft? result;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CreateTripScreen(
+            onBack: () {},
+            onContinue: (draft) => result = draft,
+          ),
+        ),
+      );
+
+      // Empty name: Continue must not advance.
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
+      expect(result, isNull);
+      expect(find.text('New trip'), findsOneWidget);
+
+      // Naming the trip enables Continue.
+      await tester.enterText(find.byType(TextField).at(0), 'Lisbon → Porto');
+      await tester.pump();
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
+
+      expect(result, isNotNull);
+      expect(result!.name, 'Lisbon → Porto');
+    });
+
+    testWidgets('renders the comp cover swatches with selection state',
+        (tester) async {
+      TripDraft? result;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CreateTripScreen(
+            onBack: () {},
+            onContinue: (draft) => result = draft,
+          ),
+        ),
+      );
+
+      expect(find.byKey(const ValueKey('cover-0')), findsOneWidget);
+      expect(find.byKey(const ValueKey('cover-1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('cover-2')), findsOneWidget);
+      expect(find.byKey(const ValueKey('cover-3')), findsNothing);
+
+      // Comp selection styling has no check glyph.
+      expect(find.byIcon(Icons.check), findsNothing);
+
+      await tester.enterText(find.byType(TextField).at(0), 'Lisbon → Porto');
+      await tester.tap(find.byKey(const ValueKey('cover-2')));
+      await tester.pump();
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
+
+      expect(result, isNotNull);
+      expect(result!.coverIndex, 2);
     });
 
     testWidgets('back button invokes onBack', (tester) async {
@@ -89,7 +150,7 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-
+      _mockClipboard(tester);
       TripDraft? resultDraft;
       List<CrewMember>? resultCrew;
 
@@ -120,8 +181,8 @@ void main() {
       await tester.pump();
       expect(find.text('Copied ✓'), findsOneWidget);
 
-      await tester.ensureVisible(find.text('OPEN THE DIARY →'));
-      await tester.tap(find.text('OPEN THE DIARY →'));
+      await tester.ensureVisible(find.text('Open the diary →'));
+      await tester.tap(find.text('Open the diary →'));
       await tester.pump();
 
       expect(resultDraft, isNotNull);
@@ -160,6 +221,39 @@ void main() {
       await tester.pump();
 
       expect(find.textContaining('dropped: Best churro ever'), findsOneWidget);
+    });
+
+    testWidgets('copy writes the session link to the clipboard', (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final List<MethodCall> calls = _mockClipboard(tester);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: InviteCrewScreen(
+            onBack: () {},
+            draft: const TripDraft(name: 'Lisbon Trip'),
+            onOpenDiary: (_, _) {},
+          ),
+        ),
+      );
+
+      await tester.ensureVisible(find.text('Copy'));
+      await tester.tap(find.text('Copy'));
+      await tester.pump();
+
+      expect(find.text('Copied ✓'), findsOneWidget);
+      final MethodCall setData =
+          calls.singleWhere((call) => call.method == 'Clipboard.setData');
+      expect(setData.arguments['text'], 'roadsong.app/t/lisbon-trip');
+
+      // The label reverts after ~1.8s.
+      await tester.pump(const Duration(milliseconds: 1900));
+      expect(find.text('Copied ✓'), findsNothing);
+      expect(find.text('Copy'), findsOneWidget);
     });
   });
 
@@ -208,17 +302,17 @@ void main() {
 
       expect(find.text('Road\nSong'), findsOneWidget);
 
-      await tester.tap(find.text('START A TRIP SONG'));
+      await tester.tap(find.text('Start a trip song'));
       await tester.pumpAndSettle();
       expect(find.text('New trip'), findsOneWidget);
 
       await tester.enterText(find.byType(TextField).first, 'Cabo Revenge');
       await tester.pump();
-      await tester.tap(find.text('CONTINUE'));
+      await tester.tap(find.text('Continue'));
       await tester.pumpAndSettle();
       expect(find.text('Who was on the trip?'), findsOneWidget);
 
-      await tester.tap(find.text('OPEN THE DIARY →'));
+      await tester.tap(find.text('Open the diary →'));
       await tester.pumpAndSettle();
       // The hub opens on the created trip's (empty) diary.
       expect(find.text('CABO REVENGE'), findsOneWidget);
@@ -342,6 +436,23 @@ void main() {
       expect(find.byType(QrCodeView), findsOneWidget);
     });
   });
+}
+
+/// Routes the platform channel's clipboard messages into [calls].
+List<MethodCall> _mockClipboard(WidgetTester tester) {
+  final List<MethodCall> calls = <MethodCall>[];
+  tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+    SystemChannels.platform,
+    (call) async {
+      calls.add(call);
+      return null;
+    },
+  );
+  addTearDown(
+    () => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null),
+  );
+  return calls;
 }
 
 /// Builds a minimal JPEG with an EXIF DateTimeOriginal tag.

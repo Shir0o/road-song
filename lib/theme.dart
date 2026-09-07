@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class BrutalTheme {
   // Theme Colors (mapped to Scrapbook/Typewriter palette)
@@ -61,4 +62,17 @@ class BrutalTheme {
       boxShadow: showShadow ? brutalShadow(offset: shadowOffset, color: shadowColor) : null,
     );
   }
+
+  /// Sentence-case CTA label style shared by primary/secondary actions
+  /// (Karla 700 with 0.02em tracking, per the design comp).
+  static TextStyle ctaLabelStyle({
+    double fontSize = 16,
+    Color color = Colors.white,
+  }) =>
+      GoogleFonts.karla(
+        fontSize: fontSize,
+        fontWeight: FontWeight.w700,
+        letterSpacing: fontSize * 0.02,
+        color: color,
+      );
 }

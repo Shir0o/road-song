@@ -18,19 +18,19 @@ void main() {
     expect(find.text('Road\nSong'), findsOneWidget);
 
     // Start a trip song -> Create Trip.
-    await tester.tap(find.text('START A TRIP SONG'));
+    await tester.tap(find.text('Start a trip song'));
     await tester.pumpAndSettle();
     expect(find.text('New trip'), findsOneWidget);
 
     // Enter a trip name and continue -> Invite Crew.
     await tester.enterText(find.byType(TextField).first, 'Lisbon Trip');
     await tester.pump();
-    await tester.tap(find.text('CONTINUE'));
+    await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
     expect(find.text('Who was on the trip?'), findsOneWidget);
 
     // Open the diary -> Main Shell lands on the created trip's Diary tab.
-    await tester.tap(find.text('OPEN THE DIARY →'));
+    await tester.tap(find.text('Open the diary →'));
     await tester.pumpAndSettle();
 
     // The empty diary of the freshly created trip is showing.
