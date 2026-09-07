@@ -10,7 +10,9 @@ void main() {
     HttpOverrides.global = _MockHttpOverrides();
   });
 
-  testWidgets('App smoke test - verifies Diary hub loads', (WidgetTester tester) async {
+  testWidgets('App smoke test - verifies Diary hub loads', (
+    WidgetTester tester,
+  ) async {
     // Build our app and trigger a frame.
     await tester.pumpWidget(const RoadSongApp());
 
@@ -46,10 +48,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('The route'), findsOneWidget);
 
-    // Song tab (studio).
+    // Song tab (lyricist start stage).
     await tester.tap(find.byIcon(Icons.music_note));
     await tester.pumpAndSettle();
-    expect(find.text('THE STUDIO'), findsOneWidget);
+    expect(find.text('Write our song'), findsOneWidget);
   });
 }
 
@@ -86,22 +88,86 @@ class _MockHttpHeaders implements HttpHeaders {
   dynamic noSuchMethod(Invocation invocation) => null;
 }
 
-class _MockHttpClientResponse extends Stream<List<int>> implements HttpClientResponse {
+class _MockHttpClientResponse extends Stream<List<int>>
+    implements HttpClientResponse {
   static const List<int> _transparentImage = [
-    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
-    0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-    0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
-    0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
-    0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
-    0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+    0x89,
+    0x50,
+    0x4E,
+    0x47,
+    0x0D,
+    0x0A,
+    0x1A,
+    0x0A,
+    0x00,
+    0x00,
+    0x00,
+    0x0D,
+    0x49,
+    0x48,
+    0x44,
+    0x52,
+    0x00,
+    0x00,
+    0x00,
+    0x01,
+    0x00,
+    0x00,
+    0x00,
+    0x01,
+    0x08,
+    0x06,
+    0x00,
+    0x00,
+    0x00,
+    0x1F,
+    0x15,
+    0xC4,
+    0x89,
+    0x00,
+    0x00,
+    0x00,
+    0x0A,
+    0x49,
+    0x44,
+    0x41,
+    0x54,
+    0x78,
+    0x9C,
+    0x63,
+    0x00,
+    0x01,
+    0x00,
+    0x00,
+    0x05,
+    0x00,
+    0x01,
+    0x0D,
+    0x0A,
+    0x2D,
+    0xB4,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x49,
+    0x45,
+    0x4E,
+    0x44,
+    0xAE,
+    0x42,
+    0x60,
+    0x82,
   ];
 
   @override
   dynamic noSuchMethod(Invocation invocation) {
     if (invocation.memberName == #statusCode) return 200;
-    if (invocation.memberName == #contentLength) return _transparentImage.length;
+    if (invocation.memberName == #contentLength)
+      return _transparentImage.length;
     if (invocation.memberName == #headers) return _MockHttpHeaders();
-    if (invocation.memberName == #compressionState) return HttpClientResponseCompressionState.notCompressed;
+    if (invocation.memberName == #compressionState)
+      return HttpClientResponseCompressionState.notCompressed;
     return null;
   }
 

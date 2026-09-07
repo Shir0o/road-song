@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'theme.dart';
 import 'models/trip_models.dart';
 import 'services/session_ingestion_service.dart';
-import 'screens/banger_screen.dart';
+import 'screens/song_tab.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/create_trip_screen.dart';
 import 'screens/invite_crew_screen.dart';
@@ -135,25 +135,6 @@ class _MainShellState extends State<MainShell> {
     "Roadtrip '22",
   ];
 
-  static const Map<String, String> _tripLyrics = {
-    "Cabo Fail '23": "Oh Cabo, you absolute disaster\n"
-        "Spinning out, losing control much faster\n"
-        "Sunburns, lost phones, and a broken toe\n"
-        "Best worst trip we'll ever know!",
-    "Mudfest 2024": "Stuck in the swamp, up to our knees\n"
-        "Mosquito bites and a muddy breeze\n"
-        "Lost my boot in the deep brown goo\n"
-        "But hey at least I was here with you!",
-    "Vegas Mistakes": "Vegas nights and neon lights\n"
-        "Lost our wallets, got in fights\n"
-        "Sleeping in the lobby chairs\n"
-        "Nobody knows and nobody cares!",
-    "Roadtrip '22": "Cruising down the highway line\n"
-        "Flat tire number three is fine\n"
-        "Radio only plays one song\n"
-        "Singing it together all day long!"
-  };
-
   int _currentTab = _diaryIndex;
   String _selectedTripName = _demoTripNames.first;
 
@@ -163,7 +144,8 @@ class _MainShellState extends State<MainShell> {
         id: 'mem-1',
         time: '11:42 PM',
         author: '@alex',
-        text: 'Alex tried to fight a seagull for the last churro. The seagull won. We are never returning to this pier.',
+        text:
+            'Alex tried to fight a seagull for the last churro. The seagull won. We are never returning to this pier.',
         day: 1,
         dayDate: 'JAN 7',
         locationName: 'Marina Pier',
@@ -172,14 +154,16 @@ class _MainShellState extends State<MainShell> {
         likes: 12,
         likedByMe: false,
         rotationDegrees: -2.0,
-        imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAqb6LbvBrW4Ue7MDpYvmzbpa3X5fcuFWPtqqrdKEiPjauXeqmVkyr1FoK2oQ86wIllp4eCLovXTDALySIyfTpuZsJKZIffX3GI4Wc4TVJgzAzWHsgNsxwMe0EDW12vTKwjH7Yo4x8epfn-t-uF4ABXKVfuhM5rJfJlCtfFIEhuWowtu075ufdeINuDczymoFN2gb7MNlwvSI5oSPkGiqsrI2KtTxhp16JhKwgBpo32ItQuvg_DLFOLCd8W8UsZtYnNhDrM9QUFG3k',
+        imageUrl:
+            'https://lh3.googleusercontent.com/aida-public/AB6AXuAqb6LbvBrW4Ue7MDpYvmzbpa3X5fcuFWPtqqrdKEiPjauXeqmVkyr1FoK2oQ86wIllp4eCLovXTDALySIyfTpuZsJKZIffX3GI4Wc4TVJgzAzWHsgNsxwMe0EDW12vTKwjH7Yo4x8epfn-t-uF4ABXKVfuhM5rJfJlCtfFIEhuWowtu075ufdeINuDczymoFN2gb7MNlwvSI5oSPkGiqsrI2KtTxhp16JhKwgBpo32ItQuvg_DLFOLCd8W8UsZtYnNhDrM9QUFG3k',
         photoCaption: 'the churro incident',
       ),
       TimelineMemory(
         id: 'mem-2',
         time: '02:15 AM',
         author: '@sarah',
-        text: 'Ended up at a 24hr laundromat playing poker with candy wrappers.',
+        text:
+            'Ended up at a 24hr laundromat playing poker with candy wrappers.',
         day: 1,
         dayDate: 'JAN 7',
         locationName: 'The 24hr Laundromat',
@@ -193,7 +177,8 @@ class _MainShellState extends State<MainShell> {
         id: 'mem-3',
         time: '04:00 AM',
         author: '@group',
-        text: 'Karaoke meltdown. We owe the owner an apology for destroying \'Mr. Brightside\'.',
+        text:
+            'Karaoke meltdown. We owe the owner an apology for destroying \'Mr. Brightside\'.',
         day: 2,
         dayDate: 'JAN 8',
         locationName: 'Karaoke Den',
@@ -202,7 +187,8 @@ class _MainShellState extends State<MainShell> {
         likes: 15,
         likedByMe: false,
         rotationDegrees: -1.0,
-        imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAa9qiUmdAn3I64gl8K4ttDZttAwinQPlReLQZWN9kOMrbJVmCHh3RgR-xZU-4fr8CvUS5rD-ql8B8PB5XsPNnvYyZ0v00_KrlexLnLexSB_PqIX9f-lAE3tIeMZ5ijH95a1ALJfNJs-U9uEF6_kifH_8ISG6yah6Weuq6w1FO0TjnjW4VjGyIuTvrzvK6oVBs89ft5wtKJ4Cpx_SnJ4am_Tpb7T04QTErssDV2CC1yErbuA8DzUUFDrPuAefpcL8fRWO70WCXwDtM',
+        imageUrl:
+            'https://lh3.googleusercontent.com/aida-public/AB6AXuAa9qiUmdAn3I64gl8K4ttDZttAwinQPlReLQZWN9kOMrbJVmCHh3RgR-xZU-4fr8CvUS5rD-ql8B8PB5XsPNnvYyZ0v00_KrlexLnLexSB_PqIX9f-lAE3tIeMZ5ijH95a1ALJfNJs-U9uEF6_kifH_8ISG6yah6Weuq6w1FO0TjnjW4VjGyIuTvrzvK6oVBs89ft5wtKJ4Cpx_SnJ4am_Tpb7T04QTErssDV2CC1yErbuA8DzUUFDrPuAefpcL8fRWO70WCXwDtM',
         photoCaption: 'mr. brightside, destroyed',
       ),
     ],
@@ -211,21 +197,24 @@ class _MainShellState extends State<MainShell> {
         id: 'mem-mud-1',
         time: '10:30 AM',
         author: '@dave',
-        text: 'Truck got stuck in the first mud pit. Had to pay a tractor driver 50 bucks to pull us out.',
+        text:
+            'Truck got stuck in the first mud pit. Had to pay a tractor driver 50 bucks to pull us out.',
         day: 1,
         dayDate: 'MAR 22',
         locationName: 'The First Mud Pit',
         likes: 6,
         likedByMe: false,
         rotationDegrees: 1.5,
-        imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCc1O6C08mrvt95HE72xNmasi9USWsLzudZ6cJ4daYEzP00r8WZyGTGOswVy5Rp9NOQYdCSUUiEPWxlXt12mS04t5KpWceFiA3tsou2zx8WgajfsEoQLFFQ7gBifUslUPasmMiRVyGfl4AckykcHEIjcWD4KXEF6OZbVdeP37vb2tbvRysbSyZLe3zy4sXMcMBYxgihyzGBswCogeH3aDyclR0AGtWq1E9C7KwCf1dzoC7oNbd0oTDywqP-c6-BQF-_TsvL56eBePg',
+        imageUrl:
+            'https://lh3.googleusercontent.com/aida-public/AB6AXuCc1O6C08mrvt95HE72xNmasi9USWsLzudZ6cJ4daYEzP00r8WZyGTGOswVy5Rp9NOQYdCSUUiEPWxlXt12mS04t5KpWceFiA3tsou2zx8WgajfsEoQLFFQ7gBifUslUPasmMiRVyGfl4AckykcHEIjcWD4KXEF6OZbVdeP37vb2tbvRysbSyZLe3zy4sXMcMBYxgihyzGBswCogeH3aDyclR0AGtWq1E9C7KwCf1dzoC7oNbd0oTDywqP-c6-BQF-_TsvL56eBePg',
         photoCaption: r'the $50 tractor',
       ),
       TimelineMemory(
         id: 'mem-mud-2',
         time: '02:00 PM',
         author: '@alex',
-        text: 'Dropped the car keys in the mud. Spent 3 hours wading around with a metal detector.',
+        text:
+            'Dropped the car keys in the mud. Spent 3 hours wading around with a metal detector.',
         day: 1,
         dayDate: 'MAR 22',
         locationName: 'Mud Pit #2 (Deeper)',
@@ -248,14 +237,16 @@ class _MainShellState extends State<MainShell> {
         likes: 11,
         likedByMe: false,
         rotationDegrees: -2.0,
-        imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDzHiCujisdOlw0WKq1uRsTgRBI7Bla5tbL5tCLeiXv4PjEvhoa8Gphpzscsi-x9vRLdn_YoyrtRUxU2I5429zUug0ql1BlvuSbrhaN0vGIx5EIBu9lshCzSm0Z-jSJOCTc-uNprN6YUHjd2MxNa8URbJFsP8wE594vcUtCwk7LHvHYCTOtSNivNEnz14ecHC2RZ3PjgY_hG4t3TLKeOMA2PpbQcD13c3DrbAki8n2JW3w0mHyaeuampdYbAQbZRw3HPUnA-EmDoPw',
+        imageUrl:
+            'https://lh3.googleusercontent.com/aida-public/AB6AXuDzHiCujisdOlw0WKq1uRsTgRBI7Bla5tbL5tCLeiXv4PjEvhoa8Gphpzscsi-x9vRLdn_YoyrtRUxU2I5429zUug0ql1BlvuSbrhaN0vGIx5EIBu9lshCzSm0Z-jSJOCTc-uNprN6YUHjd2MxNa8URbJFsP8wE594vcUtCwk7LHvHYCTOtSNivNEnz14ecHC2RZ3PjgY_hG4t3TLKeOMA2PpbQcD13c3DrbAki8n2JW3w0mHyaeuampdYbAQbZRw3HPUnA-EmDoPw',
         photoCaption: 'everything on red',
       ),
       TimelineMemory(
         id: 'mem-veg-2',
         time: '01:30 AM',
         author: '@sarah',
-        text: 'Lost our shoes at a pool party. Had to walk back to the hotel on scorching concrete.',
+        text:
+            'Lost our shoes at a pool party. Had to walk back to the hotel on scorching concrete.',
         day: 2,
         dayDate: 'JUL 5',
         locationName: 'The Pool Party',
@@ -271,7 +262,8 @@ class _MainShellState extends State<MainShell> {
         id: 'mem-road-1',
         time: '01:00 PM',
         author: '@dave',
-        text: 'Engine overheated in the middle of Death Valley. No cell service. Thankfully we had warm sodas.',
+        text:
+            'Engine overheated in the middle of Death Valley. No cell service. Thankfully we had warm sodas.',
         day: 1,
         dayDate: 'AUG 10',
         locationName: 'Death Valley, Mile 42',
@@ -280,14 +272,16 @@ class _MainShellState extends State<MainShell> {
         likes: 9,
         likedByMe: false,
         rotationDegrees: -1.5,
-        imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAg4EL78LnsYim1e5WkEBdzrj5BYFmyGTcTAttZCyyCXpya9F5BG1lA1jjLapZ-p4r4t8KI7lzb8SWGhVTDxEWbceYSeaYBqa0dyaan99fWy1NXXPC8rt_tw_-VpHz5syTQlJfIW5n4mAHV_rqear_-gVqwSgLlAnRD0A03gT-dJDTy8h2-duxFnTWcLIh6PrblLa7ehWdrR1HzQHTOkiKm3rSuzGL-2Mf7VCirqX-kATvRQl2CSeMdaokhtejeM-j9NmXmk70ES8g',
+        imageUrl:
+            'https://lh3.googleusercontent.com/aida-public/AB6AXuAg4EL78LnsYim1e5WkEBdzrj5BYFmyGTcTAttZCyyCXpya9F5BG1lA1jjLapZ-p4r4t8KI7lzb8SWGhVTDxEWbceYSeaYBqa0dyaan99fWy1NXXPC8rt_tw_-VpHz5syTQlJfIW5n4mAHV_rqear_-gVqwSgLlAnRD0A03gT-dJDTy8h2-duxFnTWcLIh6PrblLa7ehWdrR1HzQHTOkiKm3rSuzGL-2Mf7VCirqX-kATvRQl2CSeMdaokhtejeM-j9NmXmk70ES8g',
         photoCaption: 'warm sodas, zero cell service',
       ),
       TimelineMemory(
         id: 'mem-road-2',
         time: '05:30 PM',
         author: '@alex',
-        text: 'Stumbled upon a museum of giant concrete dinosaurs. Best 5 dollars ever spent.',
+        text:
+            'Stumbled upon a museum of giant concrete dinosaurs. Best 5 dollars ever spent.',
         day: 1,
         dayDate: 'AUG 10',
         locationName: 'The Cabazon Dinosaurs',
@@ -313,9 +307,9 @@ class _MainShellState extends State<MainShell> {
   List<Trip> get _createdTrips => widget.tripStore?.trips ?? const [];
 
   List<String> get _allTripNames => [
-        for (final Trip trip in _createdTrips.reversed) trip.name,
-        ..._demoTripNames,
-      ];
+    for (final Trip trip in _createdTrips.reversed) trip.name,
+    ..._demoTripNames,
+  ];
 
   String? get _activeDateRange {
     for (final Trip trip in _createdTrips) {
@@ -345,6 +339,25 @@ class _MainShellState extends State<MainShell> {
       _selectedTripName = name;
       _currentTab = _diaryIndex;
     });
+  }
+
+  /// Participants for the lyricist: invited crew for created trips, the
+  /// memory authors for the canned demo trips.
+  List<String> _participantsFor(String tripName) {
+    for (final Trip trip in _createdTrips) {
+      if (trip.name != tripName) continue;
+      return [
+        for (final CrewMember member in trip.crew)
+          if (member.invited) member.name,
+      ];
+    }
+    final List<String> names = [];
+    for (final TimelineMemory memory in _tripMemories[tripName] ?? const []) {
+      final String name = memory.author.replaceFirst('@', '').trim();
+      if (name.isEmpty || name == 'group' || names.contains(name)) continue;
+      names.add(name[0].toUpperCase() + name.substring(1));
+    }
+    return names;
   }
 
   void _showTripPicker() {
@@ -392,19 +405,18 @@ class _MainShellState extends State<MainShell> {
             memories: memories,
             onOpenDiary: () => _navigateToTab(_diaryIndex),
           ),
-          BangerScreen(
-            onBack: () => _navigateToTab(_diaryIndex),
+          SongTab(
+            key: ValueKey('song-tab-$_selectedTripName'),
             tripName: _selectedTripName,
-            lyrics: _tripLyrics[_selectedTripName] ?? '',
+            memories: memories,
+            participants: _participantsFor(_selectedTripName),
           ),
         ],
       ),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           color: BrutalTheme.paper2,
-          border: Border(
-            top: BorderSide(color: Color(0xFFE7DBC0), width: 1.0),
-          ),
+          border: Border(top: BorderSide(color: Color(0xFFE7DBC0), width: 1.0)),
         ),
         padding: const EdgeInsets.only(
           bottom: 12.0,
@@ -442,7 +454,9 @@ class _MainShellState extends State<MainShell> {
     required String label,
   }) {
     final bool isActive = _currentTab == index;
-    final Color itemColor = isActive ? BrutalTheme.primary : BrutalTheme.graphite;
+    final Color itemColor = isActive
+        ? BrutalTheme.primary
+        : BrutalTheme.graphite;
 
     return GestureDetector(
       onTap: () => _navigateToTab(index),
