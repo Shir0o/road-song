@@ -273,7 +273,7 @@ void main() {
     expect(find.textContaining('Done —'), findsNothing);
   });
 
-  testWidgets('choose-the-sound CTA leads to a coming-soon stage and back', (
+  testWidgets('choose-the-sound CTA leads to the vibe picker and back', (
     tester,
   ) async {
     await pumpLyrics(tester);
@@ -282,11 +282,91 @@ void main() {
     await tester.pump();
 
     expect(find.text('How should it sound?'), findsOneWidget);
-    expect(find.text('COMING SOON'), findsOneWidget);
+    expect(find.text('Pop-Punk'), findsOneWidget);
+    expect(find.text('Euro-Trash Synth'), findsOneWidget);
+    expect(find.text('Sad Boy Indie'), findsOneWidget);
+    expect(find.text('Acoustic Road Folk'), findsOneWidget);
+    expect(find.text('Chaotic Rap'), findsOneWidget);
+    // No vibe picked yet: no tempo control, CTA is inert.
+    expect(find.byKey(const ValueKey('tempo-slider')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('make-song')));
+    await tester.pump();
+    expect(find.text('Your song is ready!'), findsNothing);
 
-    await tester.tap(find.byKey(const ValueKey('stub-back')));
+    await tester.tap(find.byKey(const ValueKey('sound-back')));
+    await tester.pump();
+    expect(find.text('Every Wrong Turn'), findsOneWidget);
+  });
+
+  testWidgets('picking a vibe reveals tempo control bound to its range', (
+    tester,
+  ) async {
+    await pumpLyrics(tester);
+    await tester.tap(find.byKey(const ValueKey('choose-sound')));
     await tester.pump();
 
-    expect(find.text('Every Wrong Turn'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('style-card-pop-punk')));
+    await tester.pump();
+
+    expect(find.text('♪ SELECTED'), findsOneWidget);
+    expect(find.text('140–190 BPM'), findsOneWidget);
+    expect(find.text('168 BPM'), findsOneWidget);
+    final Slider slider = tester.widget<Slider>(
+      find.byKey(const ValueKey('tempo-slider')),
+    );
+    expect(slider.min, 140);
+    expect(slider.max, 190);
+    expect(slider.value, 168);
+
+    // Moving the slider retunes the tempo readout (tap lands mid-track).
+    await tester.tap(find.byKey(const ValueKey('tempo-slider')));
+    await tester.pump();
+    expect(find.text('165 BPM'), findsOneWidget);
+
+    // Switching vibes swaps the tempo window and resets to its default.
+    await tester.tap(find.byKey(const ValueKey('style-card-sad-boy-indie')));
+    await tester.pump();
+    final Slider indieSlider = tester.widget<Slider>(
+      find.byKey(const ValueKey('tempo-slider')),
+    );
+    expect(indieSlider.min, 70);
+    expect(indieSlider.max, 110);
+    expect(find.text('92 BPM'), findsOneWidget);
+  });
+
+  testWidgets('make-song runs the synthesis pass and lands on the summary', (
+    tester,
+  ) async {
+    await pumpLyrics(tester);
+    await tester.tap(find.byKey(const ValueKey('choose-sound')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('style-card-pop-punk')));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('make-song')));
+    await tester.pump();
+
+    // Making-song pass with rotating messages and the chosen take metadata.
+    expect(find.text('Tuning the guitars…'), findsOneWidget);
+    expect(find.text('RECORDING 168 BPM POP-PUNK'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(find.text('Recording the vocals…'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 2600));
+    await tester.pump();
+
+    expect(find.text('Your song is ready!'), findsOneWidget);
+    expect(find.text('mastered at 168 BPM · Pop-Punk'), findsOneWidget);
+    expect(find.text('Sections'), findsOneWidget);
+    expect(find.text('6'), findsOneWidget);
+    expect(find.text('Words aligned'), findsOneWidget);
+    expect(find.text('Evidence cues'), findsOneWidget);
+    expect(find.text('3'), findsWidgets, reason: 'all three Cabo memories cue');
+    expect(find.text('Pop-up moments'), findsOneWidget);
+    expect(find.textContaining('Marina Pier'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('remix-song')));
+    await tester.pump();
+    expect(find.text('How should it sound?'), findsOneWidget);
   });
 }

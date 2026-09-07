@@ -4,15 +4,19 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../engines/lyricist_engine.dart';
+import '../engines/evidence_cue_engine.dart';
+import '../engines/song_synth_engine.dart';
+import '../engines/timeline_aligner.dart';
 import '../models/song_models.dart';
 import '../models/trip_models.dart';
 import '../theme.dart';
 import '../widgets/brutal_widgets.dart';
 
 /// The Song tab: the songwriting stages of the zip flow — Song Start
-/// ("Write our song"), the Reading progress pass, and the modular lyrics view
-/// with per-section rewrite/edit and the conversational refinement chat.
-/// The Choose Sound stage is next in the flow and appears as a stub.
+/// ("Write our song"), the Reading progress pass, the modular lyrics view
+/// with per-section rewrite/edit and the conversational refinement chat,
+/// and the Choose Sound pass: vibe & tempo picker, the making-song
+/// synthesis pass and the ready summary.
 class SongTab extends StatefulWidget {
   final String tripName;
   final List<TimelineMemory> memories;
@@ -29,10 +33,13 @@ class SongTab extends StatefulWidget {
   _SongTabState createState() => _SongTabState();
 }
 
-enum _SongStage { start, reading, lyrics, soundStub }
+enum _SongStage { start, reading, lyrics, sound, making, ready }
 
 class _SongTabState extends State<SongTab> {
   static const LyricistEngine _lyricist = TemplateLyricist();
+  static const SongSynthEngine _synth = SimulatedSongSynth();
+  static const TimelineAligner _aligner = DeterministicTimelineAligner();
+  static const EvidenceCueEngine _cueEngine = KeywordEvidenceCueEngine();
 
   static const List<String> _readingMessages = [
     'Reading every note…',
@@ -40,6 +47,13 @@ class _SongTabState extends State<SongTab> {
     'Rhyming the place names…',
     'Saving the quiet moments for the bridge…',
   ];
+  static const List<String> _makingMessages = [
+    'Tuning the guitars…',
+    'Recording the vocals…',
+    'Syncing every syllable…',
+    'Stamping the evidence cues…',
+  ];
+  static const Duration _makingDuration = Duration(milliseconds: 3200);
   static const Duration _readingDuration = Duration(milliseconds: 3200);
   static const Duration _messageInterval = Duration(milliseconds: 800);
   static const Duration _rewriteDuration = Duration(milliseconds: 950);
@@ -47,11 +61,18 @@ class _SongTabState extends State<SongTab> {
 
   _SongStage _stage = _SongStage.start;
   LyricSong? _song;
+  // Choose Sound picker / result.
+  MusicalStyle? _style;
+  int _bpm = 0;
+  SongTimeline? _timeline;
 
   // Reading pass.
   int _readingTick = 0;
   Timer? _rotationTimer;
   Timer? _readingTimer;
+  // Making-song pass.
+  int _makingTick = 0;
+  Timer? _makingTimer;
 
   // Section rewriting / editing.
   String? _busyId;
@@ -70,6 +91,7 @@ class _SongTabState extends State<SongTab> {
     _rotationTimer?.cancel();
     _readingTimer?.cancel();
     _busyTimer?.cancel();
+    _makingTimer?.cancel();
     _typingTimer?.cancel();
     _editController.dispose();
     _chatController.dispose();
@@ -104,6 +126,58 @@ class _SongTabState extends State<SongTab> {
         _stage = _SongStage.lyrics;
       });
     });
+  }
+
+  void _pickStyle(MusicalStyle style) {
+    setState(() {
+      _style = style;
+      _bpm = style.defaultBpm;
+    });
+  }
+
+  Future<void> _makeSong() async {
+    if (_style == null || _song == null) return;
+    setState(() {
+      _stage = _SongStage.making;
+      _makingTick = 0;
+    });
+    _makingTimer = Timer.periodic(_messageInterval, (_) {
+      if (mounted) setState(() => _makingTick++);
+    });
+    Timer(_makingDuration, () async {
+      _makingTimer?.cancel();
+      final SongTimeline timeline = await _alignTimeline(_song!, _style!, _bpm);
+      if (!mounted) return;
+      setState(() {
+        _timeline = timeline;
+        _stage = _SongStage.ready;
+      });
+    });
+  }
+
+  /// Runs the full synthesis pipeline: vocal take, forced alignment against
+  /// it, and the evidence cues mapped from the trip memories.
+  Future<SongTimeline> _alignTimeline(
+    LyricSong song,
+    MusicalStyle style,
+    int bpm,
+  ) async {
+    final SynthResult audio = await _synth.synthesize(
+      song: song,
+      style: style,
+      bpm: bpm,
+    );
+    final SongTimeline timeline = await _aligner.align(
+      song: song,
+      style: style,
+      bpm: bpm,
+      audio: audio,
+    );
+    final List<EvidenceCue> cues = await _cueEngine.cues(
+      timeline: timeline,
+      memories: widget.memories,
+    );
+    return timeline.withCues(cues);
   }
 
   Future<void> _rewrite(String sectionId) async {
@@ -188,7 +262,9 @@ class _SongTabState extends State<SongTab> {
             _SongStage.start => _buildStart(),
             _SongStage.reading => _buildReading(),
             _SongStage.lyrics => _buildLyrics(),
-            _SongStage.soundStub => _buildSoundStub(),
+            _SongStage.sound => _buildSound(),
+            _SongStage.making => _buildMaking(),
+            _SongStage.ready => _buildReady(),
           },
         ),
         if (_stage == _SongStage.lyrics) _buildChatBar(),
@@ -277,23 +353,7 @@ class _SongTabState extends State<SongTab> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (int i = 0; i < 3; i++)
-                  Container(
-                    width: 9,
-                    height: 9,
-                    margin: const EdgeInsets.symmetric(horizontal: 3.5),
-                    decoration: BoxDecoration(
-                      color: BrutalTheme.primary.withValues(
-                        alpha: _readingTick % 3 == i ? 1 : 0.25,
-                      ),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-              ],
-            ),
+            _buildBeatDots(_readingTick),
             const SizedBox(height: 22),
             Text(
               _readingMessages[messageIndex],
@@ -382,7 +442,7 @@ class _SongTabState extends State<SongTab> {
             width: double.infinity,
             child: BrutalButton(
               key: const ValueKey('choose-sound'),
-              onPressed: () => setState(() => _stage = _SongStage.soundStub),
+              onPressed: () => setState(() => _stage = _SongStage.sound),
               child: Text(
                 'The words are right — choose the sound →',
                 style: BrutalTheme.ctaLabelStyle(fontSize: 15.5),
@@ -654,90 +714,367 @@ class _SongTabState extends State<SongTab> {
     );
   }
 
-  // ── Choose Sound stub ─────────────────────────────────────────────────────
+  // ── Choose Sound: vibe & tempo picker ─────────────────────────────────────
 
-  Widget _buildSoundStub() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 30),
-      child: Column(
-        children: [
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+  Widget _buildSound() {
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 30),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'How should it sound?',
+              style: GoogleFonts.instrumentSerif(
+                fontSize: 28,
+                color: BrutalTheme.inkBlack,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'pick the vibe, set the tempo',
+              style: GoogleFonts.caveat(
+                fontSize: 19,
+                color: BrutalTheme.graphite,
+              ),
+            ),
+            const SizedBox(height: 16),
+            for (final MusicalStyle style in MusicalStyle.catalog)
+              _buildStyleCard(style),
+            if (_style != null) ...[
+              const SizedBox(height: 14),
+              Row(
                 children: [
                   Text(
-                    'How should it sound?',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.instrumentSerif(
-                      fontSize: 28,
-                      color: BrutalTheme.inkBlack,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'pick the vibe and preview the sound',
+                    'Tempo',
                     style: GoogleFonts.caveat(
-                      fontSize: 19,
-                      color: BrutalTheme.graphite,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: BrutalTheme.primary,
                     ),
                   ),
-                  const SizedBox(height: 18),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFFDCCDAC)),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'COMING SOON',
-                      style: GoogleFonts.spaceMono(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.4,
-                        color: BrutalTheme.graphite,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
+                  const Spacer(),
                   Text(
-                    'Vibe picker, preview and the making-song pass are the '
-                    'next stages on the way.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.karla(
-                      fontSize: 14,
-                      height: 1.55,
-                      color: const Color(0xFF6E5F4A),
+                    '$_bpm BPM',
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: BrutalTheme.inkBlack,
                     ),
                   ),
                 ],
               ),
-            ),
-          ),
-          GestureDetector(
-            key: const ValueKey('stub-back'),
-            onTap: () => setState(() => _stage = _SongStage.lyrics),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFFDCCDAC)),
-                borderRadius: BorderRadius.circular(12),
+              Slider(
+                key: const ValueKey('tempo-slider'),
+                value: _bpm.toDouble(),
+                min: _style!.minBpm.toDouble(),
+                max: _style!.maxBpm.toDouble(),
+                divisions: _style!.maxBpm - _style!.minBpm,
+                activeColor: BrutalTheme.primary,
+                onChanged: (double value) =>
+                    setState(() => _bpm = value.round()),
               ),
-              child: Text(
-                '← Back to the lyrics',
-                style: GoogleFonts.karla(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: BrutalTheme.graphite,
+            ],
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: BrutalButton(
+                key: const ValueKey('make-song'),
+                onPressed: _style == null ? null : _makeSong,
+                child: Text(
+                  'Sounds right — make our song →',
+                  style: _style == null
+                      ? BrutalTheme.ctaLabelStyle(color: BrutalTheme.graphite)
+                      : BrutalTheme.ctaLabelStyle(),
                 ),
               ),
+            ),
+            const SizedBox(height: 12),
+            Center(child: _backToLyrics()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStyleCard(MusicalStyle style) {
+    final bool selected = _style?.id == style.id;
+    return GestureDetector(
+      key: ValueKey('style-card-${style.id}'),
+      onTap: () => _pickStyle(style),
+      child: Container(
+        margin: const EdgeInsets.only(top: 10),
+        padding: const EdgeInsets.fromLTRB(16, 13, 16, 14),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFFFF8EC) : BrutalTheme.card,
+          border: Border.all(
+            color: selected ? BrutalTheme.primary : const Color(0xFFEBDFC6),
+            width: selected ? 1.5 : 1,
+          ),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    style.label,
+                    style: GoogleFonts.instrumentSerif(
+                      fontSize: 20,
+                      color: BrutalTheme.inkBlack,
+                    ),
+                  ),
+                ),
+                if (selected)
+                  Text(
+                    '♪ SELECTED',
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                      color: BrutalTheme.primary,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 3),
+            Text(
+              style.tagline,
+              style: GoogleFonts.karla(
+                fontSize: 13.5,
+                height: 1.4,
+                color: const Color(0xFF6E5F4A),
+              ),
+            ),
+            const SizedBox(height: 7),
+            Row(
+              children: [
+                Text(
+                  '${style.minBpm}–${style.maxBpm} BPM',
+                  style: GoogleFonts.spaceMono(
+                    fontSize: 10.5,
+                    color: BrutalTheme.graphite,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    style.mood,
+                    style: GoogleFonts.caveat(
+                      fontSize: 15,
+                      color: BrutalTheme.graphite,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Making-song pass ───────────────────────────────────────────────────────
+
+  Widget _buildBeatDots(int tick) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (int i = 0; i < 3; i++)
+          Container(
+            width: 9,
+            height: 9,
+            margin: const EdgeInsets.symmetric(horizontal: 3.5),
+            decoration: BoxDecoration(
+              color: BrutalTheme.primary.withValues(
+                alpha: tick % 3 == i ? 1 : 0.25,
+              ),
+              shape: BoxShape.circle,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildMaking() {
+    final String message =
+        _makingMessages[_makingTick % _makingMessages.length];
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildBeatDots(_makingTick),
+            const SizedBox(height: 22),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.caveat(
+                fontSize: 27,
+                color: BrutalTheme.inkBlack,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'RECORDING $_bpm BPM ${_style!.label.toUpperCase()}',
+              style: GoogleFonts.spaceMono(
+                fontSize: 10,
+                letterSpacing: 1.4,
+                color: const Color(0xFFB3A488),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Ready ─────────────────────────────────────────────────────────────────
+
+  Widget _buildReady() {
+    final SongTimeline timeline = _timeline!;
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 30),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Your song is ready!',
+              style: GoogleFonts.instrumentSerif(
+                fontSize: 28,
+                color: BrutalTheme.inkBlack,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'mastered at $_bpm BPM · ${_style!.label}',
+              style: GoogleFonts.caveat(
+                fontSize: 19,
+                color: BrutalTheme.graphite,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(16, 13, 16, 9),
+              decoration: BoxDecoration(
+                color: BrutalTheme.card,
+                border: Border.all(color: const Color(0xFFEBDFC6)),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildStatRow(
+                    'Runtime',
+                    _formatDuration(timeline.durationMs),
+                  ),
+                  _buildStatRow('Sections', '${timeline.sections.length}'),
+                  _buildStatRow('Words aligned', '${timeline.wordCount}'),
+                  _buildStatRow(
+                    'Downbeats',
+                    '${timeline.downbeat.downbeatTimes.length}',
+                  ),
+                  _buildStatRow('Evidence cues', '${timeline.cues.length}'),
+                ],
+              ),
+            ),
+            if (timeline.cues.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Pop-up moments',
+                style: GoogleFonts.caveat(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: BrutalTheme.primary,
+                ),
+              ),
+              for (final EvidenceCue cue in timeline.cues.take(3))
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '${_formatDuration(cue.timeMs)} — ${cue.label}',
+                    style: GoogleFonts.karla(
+                      fontSize: 13.5,
+                      color: const Color(0xFF57493A),
+                    ),
+                  ),
+                ),
+            ],
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: BrutalButton(
+                key: const ValueKey('remix-song'),
+                onPressed: () => setState(() => _stage = _SongStage.sound),
+                child: Text(
+                  'Try another vibe',
+                  style: BrutalTheme.ctaLabelStyle(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Center(child: _backToLyrics()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.karla(
+              fontSize: 13.5,
+              color: const Color(0xFF6E5F4A),
+            ),
+          ),
+          const Spacer(),
+          Text(
+            value,
+            style: GoogleFonts.spaceMono(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: BrutalTheme.inkBlack,
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _backToLyrics() {
+    return GestureDetector(
+      key: const ValueKey('sound-back'),
+      onTap: () => setState(() => _stage = _SongStage.lyrics),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFDCCDAC)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          '← Back to the lyrics',
+          style: GoogleFonts.karla(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: BrutalTheme.graphite,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDuration(int ms) {
+    final int seconds = ms ~/ 1000;
+    return '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
   }
 }
