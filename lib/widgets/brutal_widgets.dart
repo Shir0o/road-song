@@ -152,7 +152,7 @@ class _BrutalButtonState extends State<BrutalButton> {
         shadowColor: widget.color == BrutalTheme.primary
             ? const Color(0xB2C05B3E)
             : const Color(0x59433729),
-        showShadow: !_isPressed,
+        showShadow: widget.onPressed != null && !_isPressed,
       ),
       alignment: Alignment.center,
       child: widget.child,

@@ -234,12 +234,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                       : BrutalTheme.primary.withValues(alpha: 0.4),
                   child: Text(
                     'Continue',
-                    style: GoogleFonts.karla(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.32, // 0.02em @ 16px per the comp
-                      color: Colors.white,
-                    ),
+                    style: BrutalTheme.ctaLabelStyle(),
                   ),
                 ),
               ),

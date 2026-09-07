@@ -277,12 +277,7 @@ class _InviteCrewScreenState extends State<InviteCrewScreen> {
                   onPressed: () => widget.onOpenDiary(widget.draft, _crew),
                   child: Text(
                     'Open the diary →',
-                    style: GoogleFonts.karla(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.32, // 0.02em @ 16px per the comp
-                      color: Colors.white,
-                    ),
+                    style: BrutalTheme.ctaLabelStyle(),
                   ),
                 ),
               ),
@@ -420,10 +415,8 @@ class _InviteCrewScreenState extends State<InviteCrewScreen> {
                 ),
                 child: Text(
                   _copied ? 'Copied ✓' : 'Copy',
-                  style: GoogleFonts.karla(
+                  style: BrutalTheme.ctaLabelStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.26, // 0.02em @ 13px per the comp
                     color: const Color(0xFFFFF8EC),
                   ),
                 ),
