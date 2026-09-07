@@ -32,14 +32,9 @@ class LyricSection {
 /// A generated lyric draft: title plus the ordered modular sections.
 class LyricSong {
   final String title;
-  final int draftNumber;
   final List<LyricSection> sections;
 
-  const LyricSong({
-    required this.title,
-    this.draftNumber = 1,
-    required this.sections,
-  });
+  const LyricSong({required this.title, required this.sections});
 
   LyricSection? section(String id) {
     for (final LyricSection s in sections) {
@@ -48,15 +43,13 @@ class LyricSong {
     return null;
   }
 
-  LyricSong copyWith({
-    String? title,
-    int? draftNumber,
-    List<LyricSection>? sections,
-  }) {
+  /// A copy of this song with [updated] swapped in for [sectionId].
+  LyricSong withSection(String sectionId, LyricSection updated) {
     return LyricSong(
-      title: title ?? this.title,
-      draftNumber: draftNumber ?? this.draftNumber,
-      sections: sections ?? this.sections,
+      title: title,
+      sections: [
+        for (final LyricSection s in sections) s.id == sectionId ? updated : s,
+      ],
     );
   }
 }

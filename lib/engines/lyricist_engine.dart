@@ -30,23 +30,6 @@ abstract class LyricistEngine {
 class TemplateLyricist implements LyricistEngine {
   const TemplateLyricist();
 
-  static const List<String> sectionIds = [
-    'intro',
-    'v1',
-    'ch',
-    'v2',
-    'br',
-    'out',
-  ];
-  static const List<String> sectionLabels = [
-    'Intro',
-    'Verse 1',
-    'Chorus',
-    'Verse 2',
-    'Bridge',
-    'Outro',
-  ];
-
   /// Longest memory snippet quoted inside a lyric line.
   static const int _maxSnippetLength = 64;
 
@@ -61,7 +44,10 @@ class TemplateLyricist implements LyricistEngine {
     final String who = _joinNames(names);
     final List<String> moments = [
       for (final TimelineMemory m in memories)
-        if (m.text.trim().isNotEmpty) _snippet(m.text),
+        if (m.text.trim().isNotEmpty)
+          _snippet(m.text)
+        else if (m.photoCaption?.trim().isNotEmpty ?? false)
+          _snippet(m.photoCaption!),
     ];
     final List<String> places = _placesOf(memories);
 
@@ -238,13 +224,14 @@ class TemplateLyricist implements LyricistEngine {
     required LyricSong song,
   }) async {
     final String targetId = _targetSectionFor(feedback);
-    final List<LyricSection> sections = [
-      for (final LyricSection s in song.sections)
-        if (s.id == targetId) await rewriteSection(s) else s,
-    ];
+    final LyricSection? target = song.section(targetId);
+    if (target == null) {
+      return LyricistReply(reply: _replyFor(targetId), song: song);
+    }
+    final LyricSection rewritten = await rewriteSection(target);
     return LyricistReply(
       reply: _replyFor(targetId),
-      song: song.copyWith(sections: sections),
+      song: song.withSection(targetId, rewritten),
     );
   }
 

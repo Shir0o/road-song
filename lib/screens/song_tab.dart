@@ -32,7 +32,7 @@ class SongTab extends StatefulWidget {
 enum _SongStage { start, reading, lyrics, soundStub }
 
 class _SongTabState extends State<SongTab> {
-  static const TemplateLyricist _lyricist = TemplateLyricist();
+  static const LyricistEngine _lyricist = TemplateLyricist();
 
   static const List<String> _readingMessages = [
     'Reading every note…',
@@ -119,7 +119,7 @@ class _SongTabState extends State<SongTab> {
       if (!mounted) return;
       setState(() {
         _busyId = null;
-        _song = _replaceSection(rewritten);
+        _song = _song!.withSection(rewritten.id, rewritten);
       });
     });
   }
@@ -149,20 +149,13 @@ class _SongTabState extends State<SongTab> {
           for (int i = 0; i < section.variants.length; i++)
             i == section.variantIndex ? lines : section.variants[i],
         ];
-        _song = _replaceSection(section.copyWith(variants: variants));
+        _song = _song!.withSection(id, section.copyWith(variants: variants));
       }
       _editingId = null;
     });
   }
 
   void _cancelEdit() => setState(() => _editingId = null);
-
-  LyricSong _replaceSection(LyricSection updated) => _song!.copyWith(
-    sections: [
-      for (final LyricSection s in _song!.sections)
-        s.id == updated.id ? updated : s,
-    ],
-  );
 
   Future<void> _sendChat() async {
     final String text = _chatController.text.trim();
@@ -346,7 +339,7 @@ class _SongTabState extends State<SongTab> {
                   ),
                 ),
                 Text(
-                  'draft ${song.draftNumber} · $_memoryCountLine',
+                  'draft 1 · $_memoryCountLine',
                   style: GoogleFonts.caveat(
                     fontSize: 18,
                     color: BrutalTheme.graphite,

@@ -103,7 +103,7 @@ void main() {
       expect(lines, contains('Priya'));
     });
 
-    test('lyrics quote the trip\'s own moments', () async {
+    test("lyrics quote the trip's own moments", () async {
       final LyricSong song = await composeCabo();
       final String lines = _allLines(song);
 
@@ -111,6 +111,77 @@ void main() {
       expect(lines, contains('playing poker with candy'));
       expect(lines, contains('Karaoke meltdown'));
     });
+
+    test('falls back to the photo caption when a memory has no text', () async {
+      final LyricSong song = await lyricist.composeSong(
+        tripName: "Cabo Fail '23",
+        participants: kCrew,
+        memories: const [
+          kChurroMemory,
+          TimelineMemory(
+            id: 'm2',
+            author: '@sarah',
+            time: '02:15 AM',
+            text: '',
+            day: 1,
+            photoCaption: 'the \$50 tractor',
+          ),
+          kKaraokeMemory,
+        ],
+      );
+      expect(_allLines(song), contains('the \$50 tractor'));
+    });
+
+    test(
+      'truncates over-long moments on a word boundary with an ellipsis',
+      () async {
+        final LyricSong song = await lyricist.composeSong(
+          tripName: "Cabo Fail '23",
+          participants: kCrew,
+          memories: const [
+            TimelineMemory(
+              id: 'm1',
+              author: '@alex',
+              time: '11:42 PM',
+              text:
+                  'Ended up at a 24hr laundromat playing poker with candy wrappers until sunrise.',
+              day: 1,
+              locationName: 'The 24hr Laundromat',
+            ),
+            kKaraokeMemory,
+          ],
+        );
+        expect(
+          _allLines(song),
+          contains(
+            'Ended up at a 24hr laundromat playing poker with candy wrappers…',
+          ),
+        );
+      },
+    );
+
+    test(
+      'chorus loops a single-place trip instead of spanning places',
+      () async {
+        final LyricSong song = await lyricist.composeSong(
+          tripName: "Cabo Fail '23",
+          participants: kCrew,
+          memories: const [
+            kChurroMemory,
+            TimelineMemory(
+              id: 'm2',
+              author: '@sarah',
+              time: '02:15 AM',
+              text: 'Ended up at a 24hr laundromat playing poker.',
+              day: 1,
+              locationName: 'Marina Pier',
+            ),
+          ],
+        );
+        final String chorus = song.section('ch')!.lines.join('\n');
+        expect(chorus, contains('round and round Marina Pier'));
+      },
+    );
 
     test('chorus spans the pinned route from first to last place', () async {
       final LyricSong song = await composeCabo();

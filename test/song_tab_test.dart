@@ -144,6 +144,24 @@ void main() {
       findsOneWidget,
     );
   });
+  testWidgets('saving a blank edit keeps the generated lines', (tester) async {
+    await pumpLyrics(tester);
+
+    await tester.tap(find.byKey(const ValueKey('edit-ch')));
+    await tester.pump();
+    await tester.enterText(
+      find.byKey(const ValueKey('edit-field')),
+      '   \n\n  ',
+    );
+    await tester.tap(find.byKey(const ValueKey('save-edit')));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('edit-field')), findsNothing);
+    expect(
+      find.text("Sing it back on the long road through Cabo Fail '23,"),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('rewrite ignores further taps while a rewrite is running', (
     tester,
