@@ -275,3 +275,98 @@ class GrainOverlay extends StatelessWidget {
     );
   }
 }
+
+/// Paints diagonal scrapbook-paper stripes across its canvas, matching the
+/// design comp's striped cover textures.
+class DiagonalStripesPainter extends CustomPainter {
+  final Color base;
+  final Color stripe;
+
+  /// On/off width of each stripe band.
+  final double bandWidth;
+
+  const DiagonalStripesPainter({
+    required this.base,
+    required this.stripe,
+    this.bandWidth = 4.5,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final Rect rect = Offset.zero & size;
+    canvas.save();
+    canvas.clipRect(rect);
+    canvas.drawRect(rect, Paint()..color = base);
+    final Paint stripePaint = Paint()..color = stripe;
+    // 45° bands; offset start so the first band bleeds off the top edge.
+    for (
+      double x = -size.height;
+      x < size.width + size.height;
+      x += bandWidth * 2
+    ) {
+      canvas.save();
+      canvas.translate(x, 0);
+      canvas.rotate(-math.pi / 4);
+      canvas.drawRect(
+        Rect.fromLTWH(0, -size.height, bandWidth, size.height * 3),
+        stripePaint,
+      );
+      canvas.restore();
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant DiagonalStripesPainter oldDelegate) =>
+      oldDelegate.base != base ||
+      oldDelegate.stripe != stripe ||
+      oldDelegate.bandWidth != bandWidth;
+}
+
+/// Paints a dashed rounded-rectangle border, for boxes the design comp shows
+/// with a dashed outline (e.g. the invite share-link box).
+class DashedRoundedBorderPainter extends CustomPainter {
+  final Color color;
+  final double strokeWidth;
+  final double radius;
+  final double dashLength;
+  final double gapLength;
+
+  const DashedRoundedBorderPainter({
+    required this.color,
+    this.strokeWidth = 1.5,
+    this.radius = 12,
+    this.dashLength = 6,
+    this.gapLength = 4,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final RRect rrect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(radius),
+    );
+    final Path path = Path()..addRRect(rrect);
+    final Paint paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..color = color;
+    for (final metric in path.computeMetrics()) {
+      double distance = 0;
+      while (distance < metric.length) {
+        final double end =
+            math.min(distance + dashLength, metric.length);
+        canvas.drawPath(metric.extractPath(distance, end), paint);
+        distance = end + gapLength;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant DashedRoundedBorderPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.strokeWidth != strokeWidth ||
+      oldDelegate.radius != radius ||
+      oldDelegate.dashLength != dashLength ||
+      oldDelegate.gapLength != gapLength;
+}

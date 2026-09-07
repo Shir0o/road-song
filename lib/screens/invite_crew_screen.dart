@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/trip_models.dart';
 import '../services/session_ingestion_service.dart';
@@ -94,6 +95,7 @@ class _InviteCrewScreenState extends State<InviteCrewScreen> {
   }
 
   void _copyLink() {
+    Clipboard.setData(ClipboardData(text: _sessionLink));
     _copyResetTimer?.cancel();
     setState(() => _copied = true);
     _copyResetTimer = Timer(const Duration(milliseconds: 1800), () {
@@ -274,9 +276,11 @@ class _InviteCrewScreenState extends State<InviteCrewScreen> {
                 child: BrutalButton(
                   onPressed: () => widget.onOpenDiary(widget.draft, _crew),
                   child: Text(
-                    'OPEN THE DIARY →',
-                    style: GoogleFonts.spaceMono(
-                      fontWeight: FontWeight.bold,
+                    'Open the diary →',
+                    style: GoogleFonts.karla(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.32, // 0.02em @ 16px per the comp
                       color: Colors.white,
                     ),
                   ),
@@ -371,57 +375,62 @@ class _InviteCrewScreenState extends State<InviteCrewScreen> {
   }
 
   Widget _buildShareLink() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-      decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFCBBB97), width: 1.5),
-        borderRadius: BorderRadius.circular(12),
+    return CustomPaint(
+      foregroundPainter: const DashedRoundedBorderPainter(
+        color: Color(0xFFCBBB97),
+        strokeWidth: 1.5,
+        radius: 12,
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'OR SHARE THE LINK',
-                  style: GoogleFonts.spaceMono(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.4,
-                    color: BrutalTheme.graphite,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'OR SHARE THE LINK',
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.4,
+                      color: BrutalTheme.graphite,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  _sessionLink,
-                  style: GoogleFonts.spaceMono(
-                    fontSize: 12.5,
-                    color: BrutalTheme.inkBlack,
+                  const SizedBox(height: 3),
+                  Text(
+                    _sessionLink,
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 12.5,
+                      color: BrutalTheme.inkBlack,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: _copyLink,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
-              decoration: BoxDecoration(
-                color: BrutalTheme.inkBlack,
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: Text(
-                _copied ? 'Copied ✓' : 'Copy',
-                style: GoogleFonts.spaceMono(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFFFFF8EC),
-                ),
+                ],
               ),
             ),
-          ),
-        ],
+            GestureDetector(
+              onTap: _copyLink,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 13, vertical: 8),
+                decoration: BoxDecoration(
+                  color: BrutalTheme.inkBlack,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Text(
+                  _copied ? 'Copied ✓' : 'Copy',
+                  style: GoogleFonts.karla(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.26, // 0.02em @ 13px per the comp
+                    color: const Color(0xFFFFF8EC),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

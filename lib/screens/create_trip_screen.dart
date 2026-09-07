@@ -4,13 +4,12 @@ import '../models/trip_models.dart';
 import '../theme.dart';
 import '../widgets/brutal_widgets.dart';
 
-/// Cover swatch options for a new trip's scrapbook cover.
-const List<Color> kCoverSwatches = [
-  Color(0xFFC05B3E),
-  Color(0xFF3E6B8A),
-  Color(0xFF7D8663),
-  Color(0xFFB08A3E),
-  Color(0xFFA5586B),
+/// Scrapbook cover options for a new trip, matching the design comp's
+/// diagonal-striped paper textures (tan, sage, blue).
+const List<({Color base, Color stripe})> kCoverSwatches = [
+  (base: Color(0xFFE7D9BE), stripe: Color(0xFFEFE4CC)), // tan paper
+  (base: Color(0xFFDCE0D2), stripe: Color(0xFFE6E9DD)), // sage paper
+  (base: Color(0xFFCFDCE0), stripe: Color(0xFFDAE6E9)), // blue paper
 ];
 
 /// Screen for entering a custom trip name, date range, and cover swatch.
@@ -64,6 +63,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       lastDay: _lastDayController.text.trim(),
       coverIndex: _coverIndex,
     );
+    if (!draft.isValid) return; // a trip always has a name (issue #32 D5)
     widget.onContinue(draft);
   }
 
@@ -82,7 +82,11 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
     );
   }
 
-  Widget _textField(TextEditingController controller, {String? hintText}) {
+  Widget _textField(
+    TextEditingController controller, {
+    String? hintText,
+    ValueChanged<String>? onChanged,
+  }) {
     return Container(
       decoration: BrutalTheme.brutalDecoration(
         color: BrutalTheme.card,
@@ -91,6 +95,7 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
       ),
       child: TextField(
         controller: controller,
+        onChanged: onChanged,
         style: GoogleFonts.karla(fontSize: 15, color: BrutalTheme.inkBlack),
         decoration: InputDecoration(
           border: InputBorder.none,
@@ -109,6 +114,8 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool canContinue = _nameController.text.trim().isNotEmpty;
+
     return Scaffold(
       backgroundColor: BrutalTheme.backgroundLight,
       body: SafeArea(
@@ -149,7 +156,11 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
               ),
               const SizedBox(height: 26),
               _fieldLabel('TRIP NAME'),
-              _textField(_nameController, hintText: 'Lisbon → Porto'),
+              _textField(
+                _nameController,
+                hintText: 'Lisbon → Porto',
+                onChanged: (_) => setState(() {}),
+              ),
               const SizedBox(height: 18),
               Row(
                 children: [
@@ -189,23 +200,24 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 150),
                           height: 66,
-                          decoration: BoxDecoration(
-                            color: kCoverSwatches[index],
+                          foregroundDecoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
                               color: selected
-                                  ? BrutalTheme.inkBlack
+                                  ? BrutalTheme.primary
                                   : const Color(0xFFE1D4B6),
-                              width: selected ? 3 : 1,
+                              width: selected ? 2.5 : 1,
                             ),
                           ),
-                          child: selected
-                              ? const Icon(
-                                  Icons.check,
-                                  color: Colors.white,
-                                  size: 22,
-                                )
-                              : null,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: CustomPaint(
+                              painter: DiagonalStripesPainter(
+                                base: kCoverSwatches[index].base,
+                                stripe: kCoverSwatches[index].stripe,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -216,11 +228,16 @@ class _CreateTripScreenState extends State<CreateTripScreen> {
               SizedBox(
                 width: double.infinity,
                 child: BrutalButton(
-                  onPressed: _continue,
+                  onPressed: canContinue ? _continue : null,
+                  color: canContinue
+                      ? BrutalTheme.primary
+                      : BrutalTheme.primary.withValues(alpha: 0.4),
                   child: Text(
-                    'CONTINUE',
-                    style: GoogleFonts.spaceMono(
-                      fontWeight: FontWeight.bold,
+                    'Continue',
+                    style: GoogleFonts.karla(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.32, // 0.02em @ 16px per the comp
                       color: Colors.white,
                     ),
                   ),
