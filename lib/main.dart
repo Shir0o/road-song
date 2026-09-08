@@ -16,7 +16,9 @@ void main() {
 }
 
 class RoadSongApp extends StatelessWidget {
-  const RoadSongApp({Key? key}) : super(key: key);
+  final TripStore? tripStore;
+
+  const RoadSongApp({Key? key, this.tripStore}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -28,14 +30,16 @@ class RoadSongApp extends StatelessWidget {
         primaryColor: BrutalTheme.primary,
         useMaterial3: true,
       ),
-      home: const OnboardingFlow(),
+      home: OnboardingFlow(tripStore: tripStore),
     );
   }
 }
 
 /// Entry flow: Welcome → Create Trip → Invite Crew → Main Shell.
 class OnboardingFlow extends StatefulWidget {
-  const OnboardingFlow({Key? key}) : super(key: key);
+  final TripStore? tripStore;
+
+  const OnboardingFlow({Key? key, this.tripStore}) : super(key: key);
 
   @override
   _OnboardingFlowState createState() => _OnboardingFlowState();
@@ -47,7 +51,13 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   int _step = 0; // 0: welcome, 1: create, 2: invite, 3: main
   TripDraft _draft = const TripDraft();
   List<CrewMember> _crew = kDefaultCrew;
-  final TripStore _tripStore = TripStore();
+  late final TripStore _tripStore;
+
+  @override
+  void initState() {
+    super.initState();
+    _tripStore = widget.tripStore ?? TripStore();
+  }
 
   void _goToCreate() => setState(() => _step = 1);
 
@@ -61,6 +71,8 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   void _goToWelcome() => setState(() => _step = 0);
 
   void _goToCreateFromInvite() => setState(() => _step = 1);
+
+  void _resumeTrip() => setState(() => _step = 3);
 
   void _openDiary(TripDraft draft, List<CrewMember> crew) {
     final trip = Trip(
@@ -100,7 +112,11 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
       case 3:
         return MainShell(tripStore: _tripStore);
       default:
-        return WelcomeScreen(onStart: _goToCreate);
+        return WelcomeScreen(
+          onStart: _goToCreate,
+          hasActiveTrip: _tripStore.trips.isNotEmpty,
+          onResume: _resumeTrip,
+        );
     }
   }
 }

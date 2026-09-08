@@ -7,8 +7,15 @@ import '../widgets/brutal_widgets.dart';
 /// and a primary call-to-action to start creating a trip song.
 class WelcomeScreen extends StatelessWidget {
   final VoidCallback onStart;
+  final VoidCallback? onResume;
+  final bool hasActiveTrip;
 
-  const WelcomeScreen({Key? key, required this.onStart}) : super(key: key);
+  const WelcomeScreen({
+    Key? key,
+    required this.onStart,
+    this.onResume,
+    this.hasActiveTrip = false,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -100,6 +107,20 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              if (hasActiveTrip && onResume != null) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: BrutalButton(
+                    onPressed: onResume,
+                    color: BrutalTheme.paper2,
+                    child: Text(
+                      'Resume trip',
+                      style: BrutalTheme.ctaLabelStyle(color: BrutalTheme.inkBlack),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

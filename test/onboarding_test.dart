@@ -29,9 +29,31 @@ void main() {
       expect(find.text('Road\nSong'), findsOneWidget);
       expect(find.text('a scrapbook that sings ♪'), findsOneWidget);
       expect(find.text('Start a trip song'), findsOneWidget);
+      expect(find.text('Resume trip'), findsNothing);
 
       await tester.tap(find.text('Start a trip song'));
       expect(started, isTrue);
+    });
+
+    testWidgets('renders Resume trip button when hasActiveTrip is true and invokes onResume', (tester) async {
+      bool resumed = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WelcomeScreen(
+            onStart: () {},
+            hasActiveTrip: true,
+            onResume: () => resumed = true,
+          ),
+        ),
+      );
+
+      expect(find.text('Start a trip song'), findsOneWidget);
+      expect(find.text('Resume trip'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Resume trip'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Resume trip'));
+      expect(resumed, isTrue);
     });
   });
 
@@ -329,6 +351,45 @@ void main() {
         find.byKey(const ValueKey("trip-row-Cabo Fail '23")),
         findsOneWidget,
       );
+    });
+
+    testWidgets('boots to Welcome with Resume trip when a trip is present and resumes on tap', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final store = TripStore();
+      store.addTrip(
+        Trip(
+          id: 'test-trip-1',
+          name: 'Yosemite Camp',
+          firstDay: 'JUL 1',
+          lastDay: 'JUL 4',
+          coverIndex: 0,
+          crew: const [],
+          sessionLink: 'roadsong.app/t/yosemite-camp',
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OnboardingFlow(tripStore: store),
+        ),
+      );
+
+      expect(find.text('Road\nSong'), findsOneWidget);
+      expect(find.text('Resume trip'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Resume trip'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Resume trip'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('YOSEMITE CAMP'), findsOneWidget);
     });
   });
 
