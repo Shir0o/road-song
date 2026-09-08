@@ -116,7 +116,9 @@ class WelcomeScreen extends StatelessWidget {
                     color: BrutalTheme.paper2,
                     child: Text(
                       'Resume trip',
-                      style: BrutalTheme.ctaLabelStyle(color: BrutalTheme.inkBlack),
+                      style: BrutalTheme.ctaLabelStyle(
+                        color: BrutalTheme.inkBlack,
+                      ),
                     ),
                   ),
                 ),

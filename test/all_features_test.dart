@@ -248,110 +248,123 @@ void main() {
       expect(find.text('Day 1'), findsOneWidget);
     });
 
-    testWidgets('Whole-app zip flow navigation: Welcome -> New Trip -> Invite -> Diary -> Route -> Song stages', (
-      WidgetTester tester,
-    ) async {
-      tester.view.physicalSize = const Size(800, 1600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets(
+      'Whole-app zip flow navigation: Welcome -> New Trip -> Invite -> Diary -> Route -> Song stages',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(const RoadSongApp());
+        await tester.pumpWidget(const RoadSongApp());
 
-      // 1. Welcome stage
-      expect(find.text('Road\nSong'), findsOneWidget);
-      expect(find.text('a scrapbook that sings ♪'), findsOneWidget);
-      expect(find.text('Start a trip song'), findsOneWidget);
-      expect(find.text('Resume trip'), findsNothing);
+        // 1. Welcome stage
+        expect(find.text('Road\nSong'), findsOneWidget);
+        expect(find.text('a scrapbook that sings ♪'), findsOneWidget);
+        expect(find.text('Start a trip song'), findsOneWidget);
+        expect(find.text('Resume trip'), findsNothing);
 
-      // 2. New Trip stage
-      await tester.tap(find.text('Start a trip song'));
-      await tester.pumpAndSettle();
-      expect(find.text('New trip'), findsOneWidget);
+        // 2. New Trip stage
+        await tester.tap(find.text('Start a trip song'));
+        await tester.pumpAndSettle();
+        expect(find.text('New trip'), findsOneWidget);
 
-      await tester.enterText(find.byType(TextField).first, 'Pacific Coast Highway');
-      await tester.pump();
-      await tester.tap(find.text('Continue'));
-      await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byType(TextField).first,
+          'Pacific Coast Highway',
+        );
+        await tester.pump();
+        await tester.tap(find.text('Continue'));
+        await tester.pumpAndSettle();
 
-      // 3. Invite Friends stage
-      expect(find.text('Who was on the trip?'), findsOneWidget);
-      expect(find.text('Open the diary →'), findsOneWidget);
+        // 3. Invite Friends stage
+        expect(find.text('Who was on the trip?'), findsOneWidget);
+        expect(find.text('Open the diary →'), findsOneWidget);
 
-      // 4. Diary Tab
-      await tester.tap(find.text('Open the diary →'));
-      await tester.pumpAndSettle();
-      expect(find.text('PACIFIC COAST HIGHWAY'), findsOneWidget);
-      expect(find.text('No memories yet.'), findsOneWidget);
+        // 4. Diary Tab
+        await tester.tap(find.text('Open the diary →'));
+        await tester.pumpAndSettle();
+        expect(find.text('PACIFIC COAST HIGHWAY'), findsOneWidget);
+        expect(find.text('No memories yet.'), findsOneWidget);
 
-      // Switch to Cabo demo trip to test populated tabs & song progression
-      await switchToDemoTrip(tester, "Cabo Fail '23");
-      expect(find.text('CABO FAIL \'23'), findsOneWidget);
+        // Switch to Cabo demo trip to test populated tabs & song progression
+        await switchToDemoTrip(tester, "Cabo Fail '23");
+        expect(find.text('CABO FAIL \'23'), findsOneWidget);
 
-      // 5. Route Tab
-      await tester.tap(find.byIcon(Icons.flag));
-      await tester.pumpAndSettle();
-      expect(find.text('The route'), findsOneWidget);
+        // 5. Route Tab
+        await tester.tap(find.byIcon(Icons.flag));
+        await tester.pumpAndSettle();
+        expect(find.text('The route'), findsOneWidget);
 
-      // 6. Song Tab (Start stage)
-      await tester.tap(find.byIcon(Icons.music_note));
-      await tester.pumpAndSettle();
-      expect(find.text('Turn your trip\ninto a song'), findsOneWidget);
-      expect(find.text('Write our song'), findsOneWidget);
+        // 6. Song Tab (Start stage)
+        await tester.tap(find.byIcon(Icons.music_note));
+        await tester.pumpAndSettle();
+        expect(find.text('Turn your trip\ninto a song'), findsOneWidget);
+        expect(find.text('Write our song'), findsOneWidget);
 
-      // 7. Song Reading stage -> Lyrics stage
-      await tester.tap(find.text('Write our song'));
-      await tester.pump();
-      expect(find.text('READING 3 MEMORIES'), findsOneWidget);
+        // 7. Song Reading stage -> Lyrics stage
+        await tester.tap(find.text('Write our song'));
+        await tester.pump();
+        expect(find.text('READING 3 MEMORIES'), findsOneWidget);
 
-      await tester.pump(const Duration(milliseconds: 3400));
-      await tester.pump();
-      expect(find.text('Every Wrong Turn'), findsOneWidget);
+        await tester.pump(const Duration(milliseconds: 3400));
+        await tester.pump();
+        expect(find.text('Every Wrong Turn'), findsOneWidget);
 
-      // 8. Choose Sound stage
-      await tester.ensureVisible(find.byKey(const ValueKey('choose-sound')));
-      await tester.tap(find.byKey(const ValueKey('choose-sound')));
-      await tester.pumpAndSettle();
-      expect(find.text('How should it sound?'), findsOneWidget);
+        // 8. Choose Sound stage
+        await tester.ensureVisible(find.byKey(const ValueKey('choose-sound')));
+        await tester.tap(find.byKey(const ValueKey('choose-sound')));
+        await tester.pumpAndSettle();
+        expect(find.text('How should it sound?'), findsOneWidget);
 
-      // Pick vibe (pop punk)
-      await tester.tap(find.byKey(const ValueKey('style-card-pop-punk')));
-      await tester.pump();
+        // Pick vibe (pop punk)
+        await tester.tap(find.byKey(const ValueKey('style-card-pop-punk')));
+        await tester.pump();
 
-      // 9. Making Song synthesis stage
-      await tester.tap(find.byKey(const ValueKey('make-song')));
-      await tester.pump();
-      expect(find.text('Tuning the guitars…'), findsOneWidget);
+        // 9. Making Song synthesis stage
+        await tester.tap(find.byKey(const ValueKey('make-song')));
+        await tester.pump();
+        expect(find.text('Tuning the guitars…'), findsOneWidget);
 
-      await tester.pump(const Duration(milliseconds: 3400));
-      await tester.pumpAndSettle();
+        await tester.pump(const Duration(milliseconds: 3400));
+        await tester.pumpAndSettle();
 
-      // 10. Song Ready stage with Play and Share
-      expect(find.text('Your song is ready!'), findsOneWidget);
-      expect(find.byKey(const ValueKey('play-highlight-reel')), findsOneWidget);
-      expect(find.byKey(const ValueKey('share-memorial-card')), findsOneWidget);
+        // 10. Song Ready stage with Play and Share
+        expect(find.text('Your song is ready!'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('play-highlight-reel')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('share-memorial-card')),
+          findsOneWidget,
+        );
 
-      // 11. Play Highlight Reel stage
-      await tester.tap(find.byKey(const ValueKey('play-highlight-reel')));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('reel-play-pause-button')), findsOneWidget);
+        // 11. Play Highlight Reel stage
+        await tester.tap(find.byKey(const ValueKey('play-highlight-reel')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('reel-play-pause-button')),
+          findsOneWidget,
+        );
 
-      // Back from player to ready
-      await tester.tap(find.byKey(const ValueKey('reel-close-button')));
-      await tester.pumpAndSettle();
-      expect(find.text('Your song is ready!'), findsOneWidget);
+        // Back from player to ready
+        await tester.tap(find.byKey(const ValueKey('reel-close-button')));
+        await tester.pumpAndSettle();
+        expect(find.text('Your song is ready!'), findsOneWidget);
 
-      // 12. Share Memorial stage
-      await tester.tap(find.byKey(const ValueKey('share-memorial-card')));
-      await tester.pumpAndSettle();
-      expect(find.text('SHARE MEMORIAL'), findsOneWidget);
-      expect(find.text('KEEPSAKE'), findsOneWidget);
+        // 12. Share Memorial stage
+        await tester.tap(find.byKey(const ValueKey('share-memorial-card')));
+        await tester.pumpAndSettle();
+        expect(find.text('SHARE MEMORIAL'), findsOneWidget);
+        expect(find.text('KEEPSAKE'), findsOneWidget);
 
-      // Back to ready
-      await tester.tap(find.byKey(const ValueKey('memorial-back-button')));
-      await tester.pumpAndSettle();
-      expect(find.text('Your song is ready!'), findsOneWidget);
-    });
+        // Back to ready
+        await tester.tap(find.byKey(const ValueKey('memorial-back-button')));
+        await tester.pumpAndSettle();
+        expect(find.text('Your song is ready!'), findsOneWidget);
+      },
+    );
   });
 
   group('Typewriter Screen Tests', () {
