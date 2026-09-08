@@ -29,10 +29,35 @@ void main() {
       expect(find.text('Road\nSong'), findsOneWidget);
       expect(find.text('a scrapbook that sings ♪'), findsOneWidget);
       expect(find.text('Start a trip song'), findsOneWidget);
+      expect(find.text('Resume trip'), findsNothing);
 
       await tester.tap(find.text('Start a trip song'));
       expect(started, isTrue);
     });
+
+    testWidgets(
+      'renders Resume trip button when hasActiveTrip is true and invokes onResume',
+      (tester) async {
+        bool resumed = false;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: WelcomeScreen(
+              onStart: () {},
+              hasActiveTrip: true,
+              onResume: () => resumed = true,
+            ),
+          ),
+        );
+
+        expect(find.text('Start a trip song'), findsOneWidget);
+        expect(find.text('Resume trip'), findsOneWidget);
+
+        await tester.ensureVisible(find.text('Resume trip'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Resume trip'));
+        expect(resumed, isTrue);
+      },
+    );
   });
 
   group('CreateTripScreen', () {
@@ -68,8 +93,9 @@ void main() {
       expect(backed, isFalse);
     });
 
-    testWidgets('Continue is blocked until a trip name is entered',
-        (tester) async {
+    testWidgets('Continue is blocked until a trip name is entered', (
+      tester,
+    ) async {
       TripDraft? result;
 
       await tester.pumpWidget(
@@ -97,8 +123,9 @@ void main() {
       expect(result!.name, 'Lisbon → Porto');
     });
 
-    testWidgets('renders the comp cover swatches with selection state',
-        (tester) async {
+    testWidgets('renders the comp cover swatches with selection state', (
+      tester,
+    ) async {
       TripDraft? result;
 
       await tester.pumpWidget(
@@ -210,12 +237,12 @@ void main() {
       await tester.ensureVisible(find.text('DROP A MEMORY'));
       await tester.tap(find.text('DROP A MEMORY'));
       await tester.pumpAndSettle();
-      expect(find.text('DROP A MEMORY'), findsNWidgets(2)); // button + sheet title
+      expect(
+        find.text('DROP A MEMORY'),
+        findsNWidgets(2),
+      ); // button + sheet title
 
-      await tester.enterText(
-        find.byType(TextField).last,
-        'Best churro ever',
-      );
+      await tester.enterText(find.byType(TextField).last, 'Best churro ever');
       await tester.pump();
       await tester.tap(find.text('DROP'));
       await tester.pump();
@@ -223,7 +250,9 @@ void main() {
       expect(find.textContaining('dropped: Best churro ever'), findsOneWidget);
     });
 
-    testWidgets('copy writes the session link to the clipboard', (tester) async {
+    testWidgets('copy writes the session link to the clipboard', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(800, 1400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -246,8 +275,9 @@ void main() {
       await tester.pump();
 
       expect(find.text('Copied ✓'), findsOneWidget);
-      final MethodCall setData =
-          calls.singleWhere((call) => call.method == 'Clipboard.setData');
+      final MethodCall setData = calls.singleWhere(
+        (call) => call.method == 'Clipboard.setData',
+      );
       expect(setData.arguments['text'], 'roadsong.app/t/lisbon-trip');
 
       // The label reverts after ~1.8s.
@@ -264,9 +294,7 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(
-        MaterialApp(home: WelcomeScreen(onStart: () {})),
-      );
+      await tester.pumpWidget(MaterialApp(home: WelcomeScreen(onStart: () {})));
       await tester.pump();
 
       await tester.pumpWidget(
@@ -330,6 +358,44 @@ void main() {
         findsOneWidget,
       );
     });
+
+    testWidgets(
+      'boots to Welcome with Resume trip when a trip is present and resumes on tap',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final store = TripStore();
+        store.addTrip(
+          Trip(
+            id: 'test-trip-1',
+            name: 'Yosemite Camp',
+            firstDay: 'JUL 1',
+            lastDay: 'JUL 4',
+            coverIndex: 0,
+            crew: const [],
+            sessionLink: 'roadsong.app/t/yosemite-camp',
+            createdAt: DateTime.now(),
+          ),
+        );
+
+        await tester.pumpWidget(
+          MaterialApp(home: OnboardingFlow(tripStore: store)),
+        );
+
+        expect(find.text('Road\nSong'), findsOneWidget);
+        expect(find.text('Resume trip'), findsOneWidget);
+
+        await tester.ensureVisible(find.text('Resume trip'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Resume trip'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('YOSEMITE CAMP'), findsOneWidget);
+      },
+    );
   });
 
   group('SessionIngestionService', () {
@@ -449,8 +515,10 @@ List<MethodCall> _mockClipboard(WidgetTester tester) {
     },
   );
   addTearDown(
-    () => tester.binding.defaultBinaryMessenger
-        .setMockMethodCallHandler(SystemChannels.platform, null),
+    () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      null,
+    ),
   );
   return calls;
 }

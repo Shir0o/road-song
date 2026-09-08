@@ -247,6 +247,162 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Day 1'), findsOneWidget);
     });
+
+    testWidgets(
+      'Whole-app zip flow navigation: Welcome -> New Trip -> Invite -> Diary -> Route -> Song stages',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await tester.pumpWidget(const RoadSongApp());
+
+        // 1. Welcome stage
+        expect(find.text('Road\nSong'), findsOneWidget);
+        expect(find.text('a scrapbook that sings ♪'), findsOneWidget);
+        expect(find.text('Start a trip song'), findsOneWidget);
+        expect(find.text('Resume trip'), findsNothing);
+
+        // 2. New Trip stage
+        await tester.tap(find.text('Start a trip song'));
+        await tester.pumpAndSettle();
+        expect(find.text('New trip'), findsOneWidget);
+
+        await tester.enterText(
+          find.byType(TextField).first,
+          'Pacific Coast Highway',
+        );
+        await tester.pump();
+        await tester.tap(find.text('Continue'));
+        await tester.pumpAndSettle();
+
+        // 3. Invite Friends stage
+        expect(find.text('Who was on the trip?'), findsOneWidget);
+        expect(find.text('Open the diary →'), findsOneWidget);
+
+        // 4. Diary Tab
+        await tester.tap(find.text('Open the diary →'));
+        await tester.pumpAndSettle();
+        expect(find.text('PACIFIC COAST HIGHWAY'), findsOneWidget);
+        expect(find.text('No memories yet.'), findsOneWidget);
+
+        // Switch to Cabo demo trip to test populated tabs & song progression
+        await switchToDemoTrip(tester, "Cabo Fail '23");
+        expect(find.text('CABO FAIL \'23'), findsOneWidget);
+
+        // 5. Route Tab
+        await tester.tap(find.byIcon(Icons.flag));
+        await tester.pumpAndSettle();
+        expect(find.text('The route'), findsOneWidget);
+
+        // 6. Song Tab (Start stage)
+        await tester.tap(find.byIcon(Icons.music_note));
+        await tester.pumpAndSettle();
+        expect(find.text('Turn your trip\ninto a song'), findsOneWidget);
+        expect(find.text('Write our song'), findsOneWidget);
+
+        // 7. Song Reading stage -> Lyrics stage
+        await tester.tap(find.text('Write our song'));
+        await tester.pump();
+        expect(find.text('READING 3 MEMORIES'), findsOneWidget);
+
+        await tester.pump(const Duration(milliseconds: 3400));
+        await tester.pump();
+        expect(find.text('Every Wrong Turn'), findsOneWidget);
+
+        // 8. Choose Sound stage
+        await tester.ensureVisible(find.byKey(const ValueKey('choose-sound')));
+        await tester.tap(find.byKey(const ValueKey('choose-sound')));
+        await tester.pumpAndSettle();
+        expect(find.text('How should it sound?'), findsOneWidget);
+
+        // Pick vibe (pop punk)
+        await tester.tap(find.byKey(const ValueKey('style-card-pop-punk')));
+        await tester.pump();
+
+        // 9. Making Song synthesis stage
+        await tester.tap(find.byKey(const ValueKey('make-song')));
+        await tester.pump();
+        expect(find.text('Tuning the guitars…'), findsOneWidget);
+
+        await tester.pump(const Duration(milliseconds: 3400));
+        await tester.pumpAndSettle();
+
+        // 10. Song Ready stage with Play and Share
+        expect(find.text('Your song is ready!'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('play-highlight-reel')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('share-memorial-card')),
+          findsOneWidget,
+        );
+
+        // 11. Play Highlight Reel stage
+        await tester.tap(find.byKey(const ValueKey('play-highlight-reel')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('reel-play-pause-button')),
+          findsOneWidget,
+        );
+
+        // Back from player to ready
+        await tester.tap(find.byKey(const ValueKey('reel-close-button')));
+        await tester.pumpAndSettle();
+        expect(find.text('Your song is ready!'), findsOneWidget);
+
+        // 12. Share Memorial stage
+        await tester.tap(find.byKey(const ValueKey('share-memorial-card')));
+        await tester.pumpAndSettle();
+        expect(find.text('SHARE MEMORIAL'), findsOneWidget);
+        expect(find.text('KEEPSAKE'), findsOneWidget);
+
+        // Back to ready
+        await tester.tap(find.byKey(const ValueKey('memorial-back-button')));
+        await tester.pumpAndSettle();
+        expect(find.text('Your song is ready!'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Whole-app resume flow: Welcome boots with Resume trip and navigates straight to trip hub',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(800, 1400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final store = TripStore();
+        store.addTrip(
+          Trip(
+            id: 'trip-resumed',
+            name: 'Big Sur Highway',
+            firstDay: 'OCT 1',
+            lastDay: 'OCT 5',
+            coverIndex: 1,
+            crew: const [],
+            sessionLink: 'roadsong.app/t/big-sur',
+            createdAt: DateTime.now(),
+          ),
+        );
+
+        await tester.pumpWidget(RoadSongApp(tripStore: store));
+
+        expect(find.text('Road\nSong'), findsOneWidget);
+        expect(find.text('Start a trip song'), findsOneWidget);
+        expect(find.text('Resume trip'), findsOneWidget);
+
+        await tester.ensureVisible(find.text('Resume trip'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Resume trip'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('BIG SUR HIGHWAY'), findsOneWidget);
+        expect(find.text('No memories yet.'), findsOneWidget);
+      },
+    );
   });
 
   group('Typewriter Screen Tests', () {
