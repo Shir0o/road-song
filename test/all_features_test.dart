@@ -365,6 +365,44 @@ void main() {
         expect(find.text('Your song is ready!'), findsOneWidget);
       },
     );
+
+    testWidgets(
+      'Whole-app resume flow: Welcome boots with Resume trip and navigates straight to trip hub',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(800, 1400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final store = TripStore();
+        store.addTrip(
+          Trip(
+            id: 'trip-resumed',
+            name: 'Big Sur Highway',
+            firstDay: 'OCT 1',
+            lastDay: 'OCT 5',
+            coverIndex: 1,
+            crew: const [],
+            sessionLink: 'roadsong.app/t/big-sur',
+            createdAt: DateTime.now(),
+          ),
+        );
+
+        await tester.pumpWidget(RoadSongApp(tripStore: store));
+
+        expect(find.text('Road\nSong'), findsOneWidget);
+        expect(find.text('Start a trip song'), findsOneWidget);
+        expect(find.text('Resume trip'), findsOneWidget);
+
+        await tester.ensureVisible(find.text('Resume trip'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Resume trip'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('BIG SUR HIGHWAY'), findsOneWidget);
+        expect(find.text('No memories yet.'), findsOneWidget);
+      },
+    );
   });
 
   group('Typewriter Screen Tests', () {
