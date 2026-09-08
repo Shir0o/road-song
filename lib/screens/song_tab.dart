@@ -11,6 +11,7 @@ import '../models/song_models.dart';
 import '../models/trip_models.dart';
 import '../theme.dart';
 import '../widgets/brutal_widgets.dart';
+import '../widgets/highlight_reel_player.dart';
 
 /// The Song tab: the songwriting stages of the zip flow — Song Start
 /// ("Write our song"), the Reading progress pass, the modular lyrics view
@@ -33,7 +34,7 @@ class SongTab extends StatefulWidget {
   _SongTabState createState() => _SongTabState();
 }
 
-enum _SongStage { start, reading, lyrics, sound, making, ready }
+enum _SongStage { start, reading, lyrics, sound, making, ready, player }
 
 class _SongTabState extends State<SongTab> {
   static const LyricistEngine _lyricist = TemplateLyricist();
@@ -265,6 +266,11 @@ class _SongTabState extends State<SongTab> {
             _SongStage.sound => _buildSound(),
             _SongStage.making => _buildMaking(),
             _SongStage.ready => _buildReady(),
+            _SongStage.player => HighlightReelPlayer(
+                timeline: _timeline!,
+                memories: widget.memories,
+                onClose: () => setState(() => _stage = _SongStage.ready),
+              ),
           },
         ),
         if (_stage == _SongStage.lyrics) _buildChatBar(),
@@ -1009,7 +1015,27 @@ class _SongTabState extends State<SongTab> {
             SizedBox(
               width: double.infinity,
               child: BrutalButton(
+                key: const ValueKey('play-highlight-reel'),
+                onPressed: () => setState(() => _stage = _SongStage.player),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Watch highlight reel',
+                      style: BrutalTheme.ctaLabelStyle(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: BrutalButton(
                 key: const ValueKey('remix-song'),
+                color: const Color(0xFF5A4938),
                 onPressed: () => setState(() => _stage = _SongStage.sound),
                 child: Text(
                   'Try another vibe',

@@ -365,6 +365,20 @@ void main() {
     expect(find.text('Pop-up moments'), findsOneWidget);
     expect(find.textContaining('Marina Pier'), findsOneWidget);
 
+    // Watch Highlight Reel CTA launches the player
+    expect(find.byKey(const ValueKey('play-highlight-reel')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('play-highlight-reel')));
+    await tester.pump();
+
+    expect(find.text('60 FPS'), findsOneWidget);
+    expect(find.byKey(const ValueKey('reel-play-pause-button')), findsOneWidget);
+
+    // Close button returns back to the ready screen
+    await tester.tap(find.byKey(const ValueKey('reel-close-button')));
+    await tester.pump();
+
+    expect(find.text('Your song is ready!'), findsOneWidget);
+
     await tester.tap(find.byKey(const ValueKey('remix-song')));
     await tester.pump();
     expect(find.text('How should it sound?'), findsOneWidget);
