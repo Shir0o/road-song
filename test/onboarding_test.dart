@@ -218,6 +218,46 @@ void main() {
       expect(resultCrew!.firstWhere((m) => m.id == 'sam').invited, isTrue);
     });
 
+    testWidgets('allows manually adding a participant name by hand', (tester) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      List<CrewMember>? resultCrew;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: InviteCrewScreen(
+            onBack: () {},
+            draft: const TripDraft(name: 'Lisbon Trip'),
+            onOpenDiary: (_, crew) => resultCrew = crew,
+          ),
+        ),
+      );
+
+      expect(find.byKey(const ValueKey('add-participant-field')), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const ValueKey('add-participant-field')),
+        'Clara Garcia',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('add-participant-button')));
+      await tester.pump();
+
+      expect(find.text('Clara Garcia'), findsOneWidget);
+      expect(find.text('@clara.garcia'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Open the diary →'));
+      await tester.tap(find.text('Open the diary →'));
+      await tester.pump();
+
+      expect(resultCrew, isNotNull);
+      final added = resultCrew!.firstWhere((c) => c.name == 'Clara Garcia');
+      expect(added.invited, isTrue);
+      expect(added.initial, 'C');
+    });
+
     testWidgets('guest drop sheet uses ingestion service', (tester) async {
       tester.view.physicalSize = const Size(800, 1400);
       tester.view.devicePixelRatio = 1.0;
