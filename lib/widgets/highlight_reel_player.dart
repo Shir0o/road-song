@@ -18,12 +18,14 @@ class HighlightReelPlayer extends StatefulWidget {
   final SongTimeline timeline;
   final List<TimelineMemory> memories;
   final VoidCallback? onClose;
+  final VoidCallback? onShare;
 
   const HighlightReelPlayer({
     super.key,
     required this.timeline,
     required this.memories,
     this.onClose,
+    this.onShare,
   });
 
   @override
@@ -170,6 +172,14 @@ class _HighlightReelPlayerState extends State<HighlightReelPlayer>
                       ],
                     ),
                   ),
+                  if (widget.onShare != null) ...[
+                    IconButton(
+                      key: const ValueKey('reel-share-button'),
+                      icon: const Icon(Icons.share_rounded, color: Color(0xFFFFF8EC)),
+                      tooltip: 'Share memorial',
+                      onPressed: widget.onShare,
+                    ),
+                  ],
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(

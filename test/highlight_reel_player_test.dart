@@ -177,5 +177,23 @@ void main() {
 
       expect(closed, isTrue);
     });
+
+    testWidgets('share callback triggers when share button tapped', (tester) async {
+      bool shared = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HighlightReelPlayer(
+            timeline: timeline,
+            memories: memories,
+            onShare: () => shared = true,
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('reel-share-button')));
+      await tester.pump();
+
+      expect(shared, isTrue);
+    });
   });
 }
