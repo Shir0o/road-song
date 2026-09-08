@@ -109,7 +109,7 @@ void main() {
       // Verify filtergraph contains zoompan and subtitles
       expect(recipe.filtergraph, contains('zoompan='));
       expect(recipe.filtergraph, contains('s=1080x1920'));
-      expect(recipe.filtergraph, contains('subtitles=subtitles.ass'));
+      expect(recipe.filtergraph, contains("subtitles='subtitles.ass'"));
       expect(recipe.filtergraph, contains('concat=n='));
 
       // Check commandString

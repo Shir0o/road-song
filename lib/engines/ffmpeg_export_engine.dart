@@ -125,7 +125,7 @@ class FFmpegExportEngine {
     for (int i = 0; i < segmentCount; i++) {
       final double startMs = cutPoints[i];
       final double endMs = cutPoints[i + 1];
-      final double segDurationSec = math.max(0.1, (endMs - startMs) / 1000.0);
+      final double segDurationSec = (endMs - startMs) / 1000.0;
       final int frames = math.max(1, (segDurationSec * fps).round());
 
       // Alternate Ken Burns zoom-in and zoom-out
@@ -149,8 +149,12 @@ class FFmpegExportEngine {
     // Concat segments
     fg.write('${segmentLabels.join()}concat=n=$segmentCount:v=1:a=0[vconcat];');
 
-    // Subtitle overlay and final format
-    fg.write('[vconcat]subtitles=$subtitlePath[vsub];');
+    // Subtitle overlay and final format (escape colon and backslash for FFmpeg filter argument)
+    final String escapedSubtitlePath = subtitlePath
+        .replaceAll(r'\', r'\\')
+        .replaceAll(':', r'\:')
+        .replaceAll("'", r"\'");
+    fg.write('[vconcat]subtitles=\'$escapedSubtitlePath\'[vsub];');
     fg.write('[vsub]format=yuv420p[vout]');
 
     // Generate ASS Subtitles script
