@@ -365,6 +365,21 @@ void main() {
     expect(find.text('Pop-up moments'), findsOneWidget);
     expect(find.textContaining('Marina Pier'), findsOneWidget);
 
+    // Share Memorial Card CTA launches the keepsake and export view
+    expect(find.byKey(const ValueKey('share-memorial-card')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('share-memorial-card')));
+    await tester.pump();
+
+    expect(find.text('SHARE MEMORIAL'), findsOneWidget);
+    expect(find.text('KEEPSAKE'), findsOneWidget);
+    expect(find.text('1080p MP4 Video Export'), findsOneWidget);
+
+    // Back returns to the ready screen
+    await tester.tap(find.byKey(const ValueKey('memorial-back-button')));
+    await tester.pump();
+
+    expect(find.text('Your song is ready!'), findsOneWidget);
+
     // Watch Highlight Reel CTA launches the player
     expect(find.byKey(const ValueKey('play-highlight-reel')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('play-highlight-reel')));
@@ -373,8 +388,13 @@ void main() {
     expect(find.text('60 FPS'), findsOneWidget);
     expect(find.byKey(const ValueKey('reel-play-pause-button')), findsOneWidget);
 
-    // Close button returns back to the ready screen
-    await tester.tap(find.byKey(const ValueKey('reel-close-button')));
+    // Share from player launches memorial screen
+    await tester.tap(find.byKey(const ValueKey('reel-share-button')));
+    await tester.pump();
+
+    expect(find.text('SHARE MEMORIAL'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('memorial-back-button')));
     await tester.pump();
 
     expect(find.text('Your song is ready!'), findsOneWidget);

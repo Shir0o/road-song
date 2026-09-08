@@ -12,6 +12,7 @@ import '../models/trip_models.dart';
 import '../theme.dart';
 import '../widgets/brutal_widgets.dart';
 import '../widgets/highlight_reel_player.dart';
+import 'share_memorial_screen.dart';
 
 /// The Song tab: the songwriting stages of the zip flow — Song Start
 /// ("Write our song"), the Reading progress pass, the modular lyrics view
@@ -34,7 +35,7 @@ class SongTab extends StatefulWidget {
   _SongTabState createState() => _SongTabState();
 }
 
-enum _SongStage { start, reading, lyrics, sound, making, ready, player }
+enum _SongStage { start, reading, lyrics, sound, making, ready, player, memorial }
 
 class _SongTabState extends State<SongTab> {
   static const LyricistEngine _lyricist = TemplateLyricist();
@@ -270,6 +271,14 @@ class _SongTabState extends State<SongTab> {
                 timeline: _timeline!,
                 memories: widget.memories,
                 onClose: () => setState(() => _stage = _SongStage.ready),
+                onShare: () => setState(() => _stage = _SongStage.memorial),
+              ),
+            _SongStage.memorial => ShareMemorialScreen(
+                tripName: widget.tripName,
+                timeline: _timeline!,
+                memories: widget.memories,
+                participants: widget.participants,
+                onBack: () => setState(() => _stage = _SongStage.ready),
               ),
           },
         ),
@@ -1024,6 +1033,26 @@ class _SongTabState extends State<SongTab> {
                     const SizedBox(width: 8),
                     Text(
                       'Watch highlight reel',
+                      style: BrutalTheme.ctaLabelStyle(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: BrutalButton(
+                key: const ValueKey('share-memorial-card'),
+                color: BrutalTheme.primary,
+                onPressed: () => setState(() => _stage = _SongStage.memorial),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.card_giftcard, color: Colors.white, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Share memorial card',
                       style: BrutalTheme.ctaLabelStyle(),
                     ),
                   ],
