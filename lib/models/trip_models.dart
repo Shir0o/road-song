@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+export '../services/trip_store.dart';
 
 /// A draft of a new trip being created during onboarding.
 class TripDraft {
@@ -51,14 +52,43 @@ class CrewMember {
     this.invited = false,
   });
 
-  CrewMember copyWith({bool? invited}) {
+  CrewMember copyWith({
+    String? id,
+    String? name,
+    String? handle,
+    String? initial,
+    Color? color,
+    bool? invited,
+  }) {
     return CrewMember(
-      id: id,
-      name: name,
-      handle: handle,
-      initial: initial,
-      color: color,
+      id: id ?? this.id,
+      name: name ?? this.name,
+      handle: handle ?? this.handle,
+      initial: initial ?? this.initial,
+      color: color ?? this.color,
       invited: invited ?? this.invited,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'handle': handle,
+      'initial': initial,
+      'color': color.value,
+      'invited': invited,
+    };
+  }
+
+  factory CrewMember.fromJson(Map<String, dynamic> json) {
+    return CrewMember(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      handle: json['handle'] as String,
+      initial: json['initial'] as String,
+      color: Color(json['color'] as int),
+      invited: json['invited'] as bool? ?? false,
     );
   }
 }
@@ -110,17 +140,57 @@ class Trip {
   });
 
   String get dateRange => '$firstDay – $lastDay';
-}
 
-/// In-memory store for user-created trips.
-class TripStore extends ChangeNotifier {
-  final List<Trip> _trips = [];
+  Trip copyWith({
+    String? id,
+    String? name,
+    String? firstDay,
+    String? lastDay,
+    int? coverIndex,
+    List<CrewMember>? crew,
+    String? sessionLink,
+    DateTime? createdAt,
+  }) {
+    return Trip(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      firstDay: firstDay ?? this.firstDay,
+      lastDay: lastDay ?? this.lastDay,
+      coverIndex: coverIndex ?? this.coverIndex,
+      crew: crew ?? this.crew,
+      sessionLink: sessionLink ?? this.sessionLink,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
 
-  List<Trip> get trips => List.unmodifiable(_trips);
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'firstDay': firstDay,
+      'lastDay': lastDay,
+      'coverIndex': coverIndex,
+      'crew': crew.map((c) => c.toJson()).toList(),
+      'sessionLink': sessionLink,
+      'createdAt': createdAt.toIso8601String(),
+    };
+  }
 
-  void addTrip(Trip trip) {
-    _trips.add(trip);
-    notifyListeners();
+  factory Trip.fromJson(Map<String, dynamic> json) {
+    return Trip(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      firstDay: json['firstDay'] as String? ?? '',
+      lastDay: json['lastDay'] as String? ?? '',
+      coverIndex: json['coverIndex'] as int? ?? 0,
+      crew: (json['crew'] as List<dynamic>?)
+              ?.map((item) => CrewMember.fromJson(item as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      sessionLink: json['sessionLink'] as String? ?? '',
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+          DateTime.now(),
+    );
   }
 }
 

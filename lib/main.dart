@@ -74,7 +74,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
 
   void _resumeTrip() => setState(() => _step = 3);
 
-  void _openDiary(TripDraft draft, List<CrewMember> crew) {
+  Future<void> _openDiary(TripDraft draft, List<CrewMember> crew) async {
     final trip = Trip(
       id: 'trip-${DateTime.now().millisecondsSinceEpoch}',
       name: draft.name,
@@ -85,7 +85,8 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
       sessionLink: _service.buildSessionLink(draft.name),
       createdAt: DateTime.now(),
     );
-    _tripStore.addTrip(trip);
+    await _tripStore.addTrip(trip);
+    if (!mounted) return;
     setState(() {
       _draft = draft;
       _crew = crew;

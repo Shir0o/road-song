@@ -403,6 +403,83 @@ void main() {
         expect(find.text('No memories yet.'), findsOneWidget);
       },
     );
+
+    testWidgets(
+      'Whole-app persistence flow: Create trip with manual participants survives restart and resumes with participants listed',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(800, 1400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        SharedPreferences.setMockInitialValues({});
+
+        // 1. Initial Launch
+        final store1 = TripStore.persistent();
+        await store1.init();
+
+        await tester.pumpWidget(RoadSongApp(tripStore: store1));
+        await tester.pumpAndSettle();
+
+        // 2. Start trip
+        await tester.tap(find.text('Start a trip song'));
+        await tester.pumpAndSettle();
+
+        // 3. Enter trip details
+        await tester.enterText(find.byType(TextField).at(0), 'Amalfi Drive');
+        await tester.enterText(find.byType(TextField).at(1), 'JUN 1');
+        await tester.enterText(find.byType(TextField).at(2), 'JUN 7');
+        await tester.tap(find.byKey(const ValueKey('cover-2')));
+        await tester.pump();
+        await tester.tap(find.text('Continue'));
+        await tester.pumpAndSettle();
+
+        // 4. Invite screen: add participant by hand
+        expect(find.text('Who was on the trip?'), findsOneWidget);
+        await tester.enterText(
+          find.byKey(const ValueKey('add-participant-field')),
+          'Elena Rostova',
+        );
+        await tester.tap(find.byKey(const ValueKey('add-participant-button')));
+        await tester.pump();
+        expect(find.text('Elena Rostova'), findsOneWidget);
+
+        // 5. Open diary -> lands on trip home
+        await tester.ensureVisible(find.text('Open the diary →'));
+        await tester.tap(find.text('Open the diary →'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('AMALFI DRIVE'), findsOneWidget);
+        expect(find.text('JUN 1 – JUN 7 · 0 stops'), findsOneWidget);
+
+        // Verify participant is in the Song tab
+        await tester.tap(find.byIcon(Icons.music_note));
+        await tester.pumpAndSettle();
+        expect(find.text('Write our song'), findsOneWidget);
+
+        // 6. Simulate app restart with a new instance of persistent store reading the same prefs
+        final store2 = TripStore.persistent();
+        await store2.init();
+        expect(store2.trips.length, 1);
+
+        await tester.pumpWidget(RoadSongApp(key: const ValueKey('restart-app'), tripStore: store2));
+        await tester.pumpAndSettle();
+
+        // Welcome screen shows Resume trip button for active trip
+        expect(find.text('Resume trip'), findsOneWidget);
+        await tester.ensureVisible(find.text('Resume trip'));
+        await tester.tap(find.text('Resume trip'));
+        await tester.pumpAndSettle();
+
+        // Verify resumed into Amalfi Drive
+        expect(find.text('AMALFI DRIVE'), findsOneWidget);
+
+        // Check Song tab retains participants
+        await tester.tap(find.byIcon(Icons.music_note));
+        await tester.pumpAndSettle();
+        expect(find.text('Write our song'), findsOneWidget);
+      },
+    );
   });
 
   group('Typewriter Screen Tests', () {

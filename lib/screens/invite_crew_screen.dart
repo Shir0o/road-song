@@ -72,6 +72,17 @@ class _InviteCrewScreenState extends State<InviteCrewScreen> {
   bool _copied = false;
   Timer? _copyResetTimer;
 
+  final TextEditingController _addParticipantController =
+      TextEditingController();
+
+  static const List<Color> _crewColors = [
+    Color(0xFF7D8663),
+    Color(0xFFB08A3E),
+    Color(0xFF3E6B8A),
+    Color(0xFFA5586B),
+    Color(0xFFC05B3E),
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -81,10 +92,32 @@ class _InviteCrewScreenState extends State<InviteCrewScreen> {
   @override
   void dispose() {
     _copyResetTimer?.cancel();
+    _addParticipantController.dispose();
     super.dispose();
   }
 
   String get _sessionLink => _service.buildSessionLink(widget.draft.name);
+
+  void _addParticipant() {
+    final String raw = _addParticipantController.text.trim();
+    if (raw.isEmpty) return;
+    final String initial = raw[0].toUpperCase();
+    final String handle =
+        '@${raw.toLowerCase().replaceAll(RegExp(r'\s+'), '.')}';
+    final Color color = _crewColors[_crew.length % _crewColors.length];
+    final member = CrewMember(
+      id: 'member-${DateTime.now().millisecondsSinceEpoch}-${_crew.length}',
+      name: raw,
+      handle: handle,
+      initial: initial,
+      color: color,
+      invited: true,
+    );
+    setState(() {
+      _crew.add(member);
+      _addParticipantController.clear();
+    });
+  }
 
   void _toggle(CrewMember member) {
     setState(() {
@@ -247,6 +280,8 @@ class _InviteCrewScreenState extends State<InviteCrewScreen> {
                   child: Column(
                     children: [
                       for (final member in _crew) _buildFriendTile(member),
+                      const SizedBox(height: 10),
+                      _buildAddParticipantField(),
                       const SizedBox(height: 18),
                       _buildShareLink(),
                       const SizedBox(height: 12),
@@ -365,6 +400,65 @@ class _InviteCrewScreenState extends State<InviteCrewScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildAddParticipantField() {
+    return Container(
+      decoration: BrutalTheme.brutalDecoration(
+        color: BrutalTheme.card,
+        borderWidth: 1.0,
+        showShadow: false,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              key: const ValueKey('add-participant-field'),
+              controller: _addParticipantController,
+              onSubmitted: (_) => _addParticipant(),
+              style: GoogleFonts.karla(
+                fontSize: 14,
+                color: BrutalTheme.inkBlack,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Add friend name by hand…',
+                hintStyle: GoogleFonts.karla(
+                  fontSize: 13,
+                  color: BrutalTheme.graphite.withOpacity(0.6),
+                ),
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: 8,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            key: const ValueKey('add-participant-button'),
+            onTap: _addParticipant,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: BrutalTheme.primary,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                'ADD',
+                style: GoogleFonts.spaceMono(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
