@@ -26,8 +26,18 @@ const List<Color> _photoWashPalette = [
 ];
 
 const List<String> _monthAbbreviations = [
-  'JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN',
-  'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC',
+  'JAN',
+  'FEB',
+  'MAR',
+  'APR',
+  'MAY',
+  'JUN',
+  'JUL',
+  'AUG',
+  'SEP',
+  'OCT',
+  'NOV',
+  'DEC',
 ];
 
 Color _authorColor(String author) {
@@ -49,6 +59,16 @@ String _formatClockTime(DateTime now) {
   final int hour12 = now.hour % 12 == 0 ? 12 : now.hour % 12;
   final String minutes = now.minute.toString().padLeft(2, '0');
   return '$hour12:$minutes ${now.hour >= 12 ? 'PM' : 'AM'}';
+}
+
+/// Deterministic photo-wash color for a memory, shared by the feed card and
+/// the full-screen reader.
+Color photoWashFor(TimelineMemory memory, Color fallback) {
+  int hash = 0;
+  for (final int code in memory.id.codeUnits) {
+    hash = (hash + code) % _photoWashPalette.length;
+  }
+  return _photoWashPalette[hash];
 }
 
 /// Chronological, day-grouped diary feed of a trip's memories with tactile
@@ -85,6 +105,17 @@ class DiaryTab extends StatefulWidget {
 class _DiaryTabState extends State<DiaryTab> {
   /// +1 / -1 / 0 delta vs the memory's stored [TimelineMemory.likes].
   final Map<String, int> _likeDeltas = {};
+
+  /// Keeps the feed's scroll offset across reader open/close: the reader is
+  /// pushed on top of the tab, so this controller (and the tab's state) stay
+  /// alive and the feed returns to exactly where the reader was opened.
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   bool _isLiked(TimelineMemory memory) {
     final int delta = _likeDeltas[memory.id] ?? 0;
@@ -134,12 +165,12 @@ class _DiaryTabState extends State<DiaryTab> {
         : widget.memories.map((m) => m.day).reduce(math.max);
     // Another composition made today joins the existing day group instead of
     // spawning a duplicate "day" labelled with the same date.
-    final TimelineMemory? lastMemory =
-        widget.memories.isEmpty ? null : widget.memories.last;
-    final int day =
-        (lastMemory != null && lastMemory.dayDate == todayLabel)
-            ? lastMemory.day
-            : maxDay + 1;
+    final TimelineMemory? lastMemory = widget.memories.isEmpty
+        ? null
+        : widget.memories.last;
+    final int day = (lastMemory != null && lastMemory.dayDate == todayLabel)
+        ? lastMemory.day
+        : maxDay + 1;
     widget.onAddMemory(
       TimelineMemory(
         id: 'mem-${now.microsecondsSinceEpoch}',
@@ -176,6 +207,36 @@ class _DiaryTabState extends State<DiaryTab> {
 
   void _deleteMemory(TimelineMemory memory) {
     widget.onDeleteMemory?.call(memory);
+  }
+
+  /// Chronological feed order: by creation time when known, otherwise by the
+  /// display [TimelineMemory.time] string (fixtures carry `HH:MM`-style
+  /// labels). Stable for equal keys so same-day submissions keep insertion
+  /// order.
+  List<TimelineMemory> get _chronological {
+    final List<TimelineMemory> sorted = List.of(widget.memories);
+    sorted.sort((a, b) {
+      final DateTime? aTime = a.createdAt;
+      final DateTime? bTime = b.createdAt;
+      if (aTime != null && bTime != null) {
+        final int byCreated = aTime.compareTo(bTime);
+        if (byCreated != 0) return byCreated;
+      } else if (aTime != null) {
+        return -1;
+      } else if (bTime != null) {
+        return 1;
+      }
+      return a.time.compareTo(b.time);
+    });
+    return sorted;
+  }
+
+  void _openReader(TimelineMemory memory) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MemoryReaderScreen(memory: memory),
+      ),
+    );
   }
 
   @override
@@ -278,20 +339,23 @@ class _DiaryTabState extends State<DiaryTab> {
   }
 
   Widget _buildFeed() {
+    final List<TimelineMemory> chronological = _chronological;
     final Map<int, List<TimelineMemory>> groups = {};
-    for (final memory in widget.memories) {
+    for (final memory in chronological) {
       groups.putIfAbsent(memory.day, () => []).add(memory);
     }
     final List<int> days = groups.keys.toList()..sort();
 
     return ListView(
+      key: const ValueKey('diary-feed'),
+      controller: _scrollController,
       padding: const EdgeInsets.only(bottom: 140),
       children: [
         for (final int day in days) ...[
           _buildDayHeader(day, groups[day]!),
           for (final memory in groups[day]!) _buildMemoryCard(memory),
         ],
-        _buildSongBanner(widget.memories.length),
+        _buildSongBanner(chronological.length),
       ],
     );
   }
@@ -342,143 +406,146 @@ class _DiaryTabState extends State<DiaryTab> {
   Widget _buildMemoryCard(TimelineMemory memory) {
     final bool liked = _isLiked(memory);
     final Color heartColor = liked ? BrutalTheme.primary : BrutalTheme.graphite;
-    return Container(
+    return GestureDetector(
       key: ValueKey('memory-${memory.id}'),
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: BrutalTheme.card,
-        border: Border.all(color: const Color(0xFFEBDFC6), width: 1),
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: BrutalTheme.brutalShadow(),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 31,
-                height: 31,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: memory.authorColor ?? _authorColor(memory.author),
-                ),
-                child: Text(
-                  _authorInitial(memory.author),
-                  style: GoogleFonts.karla(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+      onTap: () => _openReader(memory),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: BrutalTheme.card,
+          border: Border.all(color: const Color(0xFFEBDFC6), width: 1),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: BrutalTheme.brutalShadow(),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 31,
+                  height: 31,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: memory.authorColor ?? _authorColor(memory.author),
+                  ),
+                  child: Text(
+                    _authorInitial(memory.author),
+                    style: GoogleFonts.karla(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      memory.displayContributor,
-                      style: GoogleFonts.karla(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.bold,
-                        color: BrutalTheme.inkBlack,
-                      ),
-                    ),
-                    Text(
-                      memory.isPinned
-                          ? '${memory.time} · ⚑ ${memory.locationName}'
-                          : memory.time,
-                      style: GoogleFonts.karla(
-                        fontSize: 11,
-                        color: BrutalTheme.graphite,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              GestureDetector(
-                key: ValueKey('like-${memory.id}'),
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _toggleLike(memory),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 4,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '♥',
+                        memory.displayContributor,
                         style: GoogleFonts.karla(
-                          fontSize: 12.5,
+                          fontSize: 13.5,
                           fontWeight: FontWeight.bold,
-                          color: heartColor,
+                          color: BrutalTheme.inkBlack,
                         ),
                       ),
-                      const SizedBox(width: 4),
                       Text(
-                        '${_displayLikes(memory)}',
-                        key: ValueKey('like-count-${memory.id}'),
+                        memory.isPinned
+                            ? '${memory.time} · ⚑ ${memory.locationName}'
+                            : memory.time,
                         style: GoogleFonts.karla(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.bold,
-                          color: heartColor,
+                          fontSize: 11,
+                          color: BrutalTheme.graphite,
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (memory.text.trim().isNotEmpty)
-            Text(
-              memory.text,
-              style: GoogleFonts.karla(
-                fontSize: 14.5,
-                height: 1.55,
-                color: BrutalTheme.inkBlack,
-              ),
-            ),
-          if (memory.hasVideo)
-            _buildClip(memory)
-          else if (memory.hasPhoto)
-            _buildPolaroid(memory)
-          else if (memory.displayCaption.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                memory.displayCaption,
-                style: GoogleFonts.caveat(
-                  fontSize: 17,
-                  color: const Color(0xFF5D4F3C),
-                ),
-              ),
-            ),
-          if (_isMine(memory)) ...[
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _MemoryAction(
-                  key: ValueKey('edit-${memory.id}'),
-                  label: 'EDIT CAPTION',
-                  onTap: () => _editMemory(memory),
-                ),
-                const SizedBox(width: 8),
-                _MemoryAction(
-                  key: ValueKey('delete-${memory.id}'),
-                  label: 'DELETE',
-                  onTap: () => _deleteMemory(memory),
+                GestureDetector(
+                  key: ValueKey('like-${memory.id}'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _toggleLike(memory),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '♥',
+                          style: GoogleFonts.karla(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold,
+                            color: heartColor,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${_displayLikes(memory)}',
+                          key: ValueKey('like-count-${memory.id}'),
+                          style: GoogleFonts.karla(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.bold,
+                            color: heartColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
+            const SizedBox(height: 10),
+            if (memory.text.trim().isNotEmpty)
+              Text(
+                memory.text,
+                style: GoogleFonts.karla(
+                  fontSize: 14.5,
+                  height: 1.55,
+                  color: BrutalTheme.inkBlack,
+                ),
+              ),
+            if (memory.hasVideo)
+              _buildClip(memory)
+            else if (memory.hasPhoto)
+              _buildPolaroid(memory)
+            else if (memory.displayCaption.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  memory.displayCaption,
+                  style: GoogleFonts.caveat(
+                    fontSize: 17,
+                    color: const Color(0xFF5D4F3C),
+                  ),
+                ),
+              ),
+            if (_isMine(memory)) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  _MemoryAction(
+                    key: ValueKey('edit-${memory.id}'),
+                    label: 'EDIT CAPTION',
+                    onTap: () => _editMemory(memory),
+                  ),
+                  const SizedBox(width: 8),
+                  _MemoryAction(
+                    key: ValueKey('delete-${memory.id}'),
+                    label: 'DELETE',
+                    onTap: () => _deleteMemory(memory),
+                  ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -575,10 +642,7 @@ class _DiaryTabState extends State<DiaryTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      SizedBox(
-                        height: 148,
-                        child: _buildPhoto(memory, wash),
-                      ),
+                      SizedBox(height: 148, child: _buildPhoto(memory, wash)),
                       const SizedBox(height: 6),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -656,13 +720,8 @@ class _DiaryTabState extends State<DiaryTab> {
     return Container(color: _photoWash(memory, wash));
   }
 
-  Color _photoWash(TimelineMemory memory, Color fallback) {
-    int hash = 0;
-    for (final int code in memory.id.codeUnits) {
-      hash = (hash + code) % _photoWashPalette.length;
-    }
-    return _photoWashPalette[hash];
-  }
+  Color _photoWash(TimelineMemory memory, Color fallback) =>
+      photoWashFor(memory, fallback);
 
   Widget _buildSongBanner(int memoryCount) {
     return GestureDetector(
@@ -673,10 +732,7 @@ class _DiaryTabState extends State<DiaryTab> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
         decoration: BoxDecoration(
           color: const Color(0xFFF3E5D3),
-          border: Border.all(
-            color: const Color(0x88C05B3E),
-            width: 1.5,
-          ),
+          border: Border.all(color: const Color(0x88C05B3E), width: 1.5),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -798,6 +854,304 @@ class _MemoryAction extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Full-screen reading view for a single memory: the media, caption and
+/// contributor get the whole surface, with a back affordance returning to the
+/// diary at the same scroll position. Pure Flutter widgets — identical on
+/// mobile and web.
+class MemoryReaderScreen extends StatelessWidget {
+  final TimelineMemory memory;
+
+  const MemoryReaderScreen({Key? key, required this.memory}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: BrutalTheme.backgroundLight,
+      body: GrainOverlay(
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildTopBar(context),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildDayLabel(),
+                      const SizedBox(height: 14),
+                      _buildMedia(),
+                      const SizedBox(height: 18),
+                      _buildBody(),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopBar(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 8, 16, 4),
+      child: Row(
+        children: [
+          GestureDetector(
+            key: const ValueKey('reader-back'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => Navigator.of(context).pop(),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Icon(
+                Icons.arrow_back,
+                size: 22,
+                color: BrutalTheme.inkBlack,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              'MEMORY',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.spaceMono(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.5,
+                color: BrutalTheme.graphite,
+              ),
+            ),
+          ),
+          const SizedBox(width: 42),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDayLabel() {
+    final List<String> parts = [
+      'Day ${memory.day}',
+      if (memory.dayDate != null && memory.dayDate!.isNotEmpty) memory.dayDate!,
+    ];
+    return Text(
+      parts.join(' · ').toUpperCase(),
+      textAlign: TextAlign.center,
+      style: GoogleFonts.spaceMono(
+        fontSize: 11,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 1.2,
+        color: BrutalTheme.primary,
+      ),
+    );
+  }
+
+  Widget _buildMedia() {
+    if (memory.hasVideo) {
+      return _buildVideoTile();
+    }
+    if (memory.hasPhoto) {
+      return _buildPhotoTile();
+    }
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildPhotoTile() {
+    final Uint8List? bytes = memory.photoBytes;
+    final Widget photo;
+    if (bytes != null) {
+      photo = Image.memory(bytes, fit: BoxFit.cover);
+    } else if (memory.imageUrl != null) {
+      photo = Image.network(
+        memory.imageUrl!,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Container(
+          color: photoWashFor(
+            memory,
+            memory.authorColor ?? _authorColor(memory.author),
+          ),
+        ),
+      );
+    } else {
+      photo = Container(
+        color: photoWashFor(
+          memory,
+          memory.authorColor ?? _authorColor(memory.author),
+        ),
+      );
+    }
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFFEF9),
+            border: Border.all(color: const Color(0xFFEDE3CC), width: 1),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x66433729),
+                offset: Offset(0, 12),
+                blurRadius: 22,
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(9, 9, 9, 7),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(height: 300, child: photo),
+              const SizedBox(height: 6),
+              if (memory.displayCaption.isNotEmpty)
+                Text(
+                  memory.displayCaption,
+                  style: GoogleFonts.caveat(
+                    fontSize: 18,
+                    color: const Color(0xFF5D4F3C),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVideoTile() {
+    final Uint8List? bytes = memory.videoBytes;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2E2418),
+        border: Border.all(color: BrutalTheme.inkBlack, width: 1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.movie_outlined,
+                size: 16,
+                color: Color(0xFFF1E7D1),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'SHORT CLIP',
+                style: GoogleFonts.spaceMono(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.0,
+                  color: const Color(0xFFF1E7D1),
+                ),
+              ),
+              const Spacer(),
+              if (bytes != null)
+                Text(
+                  _formatClipSize(bytes.length),
+                  style: GoogleFonts.spaceMono(
+                    fontSize: 9.5,
+                    color: const Color(0xFFBCAD8F),
+                  ),
+                ),
+            ],
+          ),
+          if (memory.displayCaption.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              memory.displayCaption,
+              style: GoogleFonts.caveat(
+                fontSize: 16.5,
+                color: const Color(0xFFF1E7D1),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: memory.authorColor ?? _authorColor(memory.author),
+              ),
+              child: Text(
+                _authorInitial(memory.author),
+                style: GoogleFonts.karla(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    memory.displayContributor,
+                    style: GoogleFonts.karla(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: BrutalTheme.inkBlack,
+                    ),
+                  ),
+                  Text(
+                    [
+                      memory.time,
+                      if (memory.isPinned) '⚑ ${memory.locationName}',
+                    ].join(' · '),
+                    style: GoogleFonts.karla(
+                      fontSize: 12,
+                      color: BrutalTheme.graphite,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (memory.text.trim().isNotEmpty) ...[
+          const SizedBox(height: 18),
+          Text(
+            memory.text,
+            style: GoogleFonts.karla(
+              fontSize: 17,
+              height: 1.6,
+              color: BrutalTheme.inkBlack,
+            ),
+          ),
+        ],
+        if (memory.displayCaption.isNotEmpty &&
+            !memory.hasPhoto &&
+            !memory.hasVideo) ...[
+          const SizedBox(height: 14),
+          Text(
+            memory.displayCaption,
+            style: GoogleFonts.caveat(
+              fontSize: 19,
+              color: const Color(0xFF5D4F3C),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
