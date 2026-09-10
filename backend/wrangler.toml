@@ -1,0 +1,40 @@
+# Road Song trip-store backend — Cloudflare Workers + D1 + R2 + static assets.
+#
+# The guest site is the SAME Flutter web build (anonymous guest mode) served
+# as static assets by this Worker; /t/<trip-code> paths fall through to the
+# SPA so the app's guest route can read the code from the URL.
+#
+# Deploy (see backend/README.md for the full walkthrough):
+#   npx wrangler d1 migrations apply road-song --remote
+#   npx wrangler r2 bucket create road-song-media
+#   npx wrangler secret put R2_ACCESS_KEY_ID
+#   npx wrangler secret put R2_SECRET_ACCESS_KEY
+#   npx wrangler secret put R2_ACCOUNT_ID
+#   npx wrangler deploy
+
+name = "road-song"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Static assets: the Flutter web build (guest + creator surfaces). Unknown
+# paths (e.g. /t/<code>) serve index.html so the SPA can route on the code.
+[assets]
+directory = "./public"
+not_found_handling = "single-page-application"
+
+# D1: trips + memories, scoped by trip code.
+[[d1_databases]]
+binding = "DB"
+database_name = "road-song"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+# R2: media objects, keys scoped under trips/<tripId>/.
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "road-song-media"
+
+# R2 S3 API credentials for presigning (set via `wrangler secret put`):
+#   R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_ACCOUNT_ID
+# The Worker mints short-lived presigned PUT/GET URLs against the S3 API
+# endpoint; the R2 binding above is used for direct object checks.

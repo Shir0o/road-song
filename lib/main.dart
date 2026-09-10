@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme.dart';
 import 'models/trip_models.dart';
+import 'services/remote_trip_store.dart';
 import 'services/session_ingestion_service.dart';
+import 'services/trip_link_sharer.dart';
+import 'screens/guest_portal_screen.dart';
 import 'screens/song_tab.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/create_trip_screen.dart';
@@ -19,10 +22,19 @@ class RoadSongApp extends StatelessWidget {
   final TripStore? tripStore;
   final MemoryMediaPickers mediaPickers;
 
+  /// The trip-store client the guest portal uses. Tests inject the fake
+  /// backend here; production defaults to the real HTTP client.
+  final TripStoreClient? guestClient;
+
+  /// Media pick seams for the guest portal (tests pass fakes).
+  final GuestMediaPickers guestMediaPickers;
+
   const RoadSongApp({
     Key? key,
     this.tripStore,
     this.mediaPickers = const MemoryMediaPickers(),
+    this.guestClient,
+    this.guestMediaPickers = const GuestMediaPickers(),
   }) : super(key: key);
 
   @override
@@ -35,8 +47,68 @@ class RoadSongApp extends StatelessWidget {
         primaryColor: BrutalTheme.primary,
         useMaterial3: true,
       ),
-      home: OnboardingFlow(tripStore: tripStore, mediaPickers: mediaPickers),
+      // The guest deep link (/t/<code>) is handled by _AppHome reading the
+      // route name. Returning null for "/" falls back to [home]; any other
+      // initial route (the deep link) boots the same home widget, which
+      // decides between the guest portal and the creator flow.
+      onGenerateRoute: (RouteSettings settings) {
+        if (settings.name == Navigator.defaultRouteName) return null;
+        return MaterialPageRoute<void>(
+          settings: settings,
+          builder: (_) => _AppHome(
+            tripStore: tripStore,
+            mediaPickers: mediaPickers,
+            guestClient: guestClient,
+            guestMediaPickers: guestMediaPickers,
+          ),
+        );
+      },
+      home: _AppHome(
+        tripStore: tripStore,
+        mediaPickers: mediaPickers,
+        guestClient: guestClient,
+        guestMediaPickers: guestMediaPickers,
+      ),
     );
+  }
+}
+
+/// Chooses the surface: a guest opening a `roadsong.app/t/<code>` link lands
+/// on the anonymous guest portal; everyone else gets the creator flow.
+class _AppHome extends StatelessWidget {
+  final TripStore? tripStore;
+  final MemoryMediaPickers mediaPickers;
+  final TripStoreClient? guestClient;
+  final GuestMediaPickers guestMediaPickers;
+
+  const _AppHome({
+    this.tripStore,
+    required this.mediaPickers,
+    this.guestClient,
+    required this.guestMediaPickers,
+  });
+
+  /// The trip code from the launch route (`/t/<code>`), if any.
+  String? get _launchTripCode {
+    final String route =
+        WidgetsBinding.instance.platformDispatcher.defaultRouteName;
+    final String? code = tripCodeFromLink(route);
+    if (code != null) return code;
+    // Web builds may surface the full URL in the route name.
+    return tripCodeFromLink(Uri.base.toString());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final String? code = _launchTripCode;
+    if (code != null) {
+      return GuestPortalScreen(
+        tripCode: code,
+        client: guestClient ?? HttpTripStoreClient(),
+        mediaPickers: guestMediaPickers,
+      );
+    }
+    return OnboardingFlow(tripStore: tripStore, mediaPickers: mediaPickers);
   }
 }
 
@@ -432,6 +504,28 @@ class _MainShellState extends State<MainShell> {
     setState(() => _currentTab = index);
   }
 
+  static const TripLinkSharer _linkSharer = TripLinkSharer();
+
+  Future<void> _shareTrip() async {
+    final Trip? trip = _selectedCreatedTrip;
+    if (trip == null) return;
+    final String link = _linkSharer.linkFor(trip);
+    await _linkSharer.share(link);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: BrutalTheme.primary,
+        content: Text(
+          'Trip link copied — anyone with it can add memories.',
+          style: GoogleFonts.karla(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
   void _switchTrip(String name) {
     setState(() {
       _selectedTripName = name;
@@ -499,6 +593,7 @@ class _MainShellState extends State<MainShell> {
             onDeleteMemory: _deleteMemory,
             onOpenSong: () => _navigateToTab(_songIndex),
             onSwitchTrip: _showTripPicker,
+            onShareTrip: _selectedCreatedTrip == null ? null : _shareTrip,
             mediaPickers: widget.mediaPickers,
           ),
           RouteTab(
