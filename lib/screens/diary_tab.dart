@@ -59,9 +59,11 @@ class DiaryTab extends StatefulWidget {
   final String? tripDateRange;
   final List<TimelineMemory> memories;
   final ValueChanged<TimelineMemory> onAddMemory;
+  final ValueChanged<TimelineMemory>? onUpdateMemory;
+  final ValueChanged<TimelineMemory>? onDeleteMemory;
   final VoidCallback onOpenSong;
   final VoidCallback onSwitchTrip;
-  final Future<Uint8List?> Function() pickPhotoBytes;
+  final MemoryMediaPickers mediaPickers;
 
   const DiaryTab({
     Key? key,
@@ -69,9 +71,11 @@ class DiaryTab extends StatefulWidget {
     this.tripDateRange,
     required this.memories,
     required this.onAddMemory,
+    this.onUpdateMemory,
+    this.onDeleteMemory,
     required this.onOpenSong,
     required this.onSwitchTrip,
-    required this.pickPhotoBytes,
+    this.mediaPickers = const MemoryMediaPickers(),
   }) : super(key: key);
 
   @override
@@ -118,7 +122,7 @@ class _DiaryTabState extends State<DiaryTab> {
     final MemoryComposeResult? result = await showAddMemorySheet(
       context,
       memories: widget.memories,
-      pickPhotoBytes: widget.pickPhotoBytes,
+      mediaPickers: widget.mediaPickers,
     );
     if (result == null || !mounted) return;
 
@@ -139,16 +143,39 @@ class _DiaryTabState extends State<DiaryTab> {
     widget.onAddMemory(
       TimelineMemory(
         id: 'mem-${now.microsecondsSinceEpoch}',
-        author: '@you',
+        author: kCreatorHandle,
+        contributor: kCreatorName,
         time: _formatClockTime(now),
         text: result.note,
+        caption: result.caption,
+        type: result.type,
+        createdAt: now,
         day: day,
         dayDate: todayLabel,
         locationName: result.locationName,
         photoBytes: result.photoBytes,
+        videoBytes: result.videoBytes,
         rotationDegrees: (math.Random().nextDouble() * 6) - 3,
       ),
     );
+  }
+
+  bool _isMine(TimelineMemory memory) =>
+      memory.author == kCreatorHandle || memory.contributor == kCreatorName;
+
+  Future<void> _editMemory(TimelineMemory memory) async {
+    final MemoryEditResult? result = await showEditMemorySheet(
+      context,
+      memory: memory,
+    );
+    if (result == null || !mounted) return;
+    widget.onUpdateMemory?.call(
+      memory.copyWith(caption: result.caption, contributor: result.contributor),
+    );
+  }
+
+  void _deleteMemory(TimelineMemory memory) {
+    widget.onDeleteMemory?.call(memory);
   }
 
   @override
@@ -353,7 +380,7 @@ class _DiaryTabState extends State<DiaryTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      memory.author,
+                      memory.displayContributor,
                       style: GoogleFonts.karla(
                         fontSize: 13.5,
                         fontWeight: FontWeight.bold,
@@ -409,17 +436,110 @@ class _DiaryTabState extends State<DiaryTab> {
             ],
           ),
           const SizedBox(height: 10),
-          Text(
-            memory.text,
-            style: GoogleFonts.karla(
-              fontSize: 14.5,
-              height: 1.55,
-              color: BrutalTheme.inkBlack,
+          if (memory.text.trim().isNotEmpty)
+            Text(
+              memory.text,
+              style: GoogleFonts.karla(
+                fontSize: 14.5,
+                height: 1.55,
+                color: BrutalTheme.inkBlack,
+              ),
             ),
-          ),
-          if (memory.hasPhoto || memory.photoCaption != null)
-            _buildPolaroid(memory),
+          if (memory.hasVideo)
+            _buildClip(memory)
+          else if (memory.hasPhoto)
+            _buildPolaroid(memory)
+          else if (memory.displayCaption.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                memory.displayCaption,
+                style: GoogleFonts.caveat(
+                  fontSize: 17,
+                  color: const Color(0xFF5D4F3C),
+                ),
+              ),
+            ),
+          if (_isMine(memory)) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _MemoryAction(
+                  key: ValueKey('edit-${memory.id}'),
+                  label: 'EDIT CAPTION',
+                  onTap: () => _editMemory(memory),
+                ),
+                const SizedBox(width: 8),
+                _MemoryAction(
+                  key: ValueKey('delete-${memory.id}'),
+                  label: 'DELETE',
+                  onTap: () => _deleteMemory(memory),
+                ),
+              ],
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  /// Brutalist clip tile for a video memory. Video bytes are never decoded —
+  /// only their presence and size are shown.
+  Widget _buildClip(TimelineMemory memory) {
+    final Uint8List? bytes = memory.videoBytes;
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Container(
+        key: ValueKey('clip-${memory.id}'),
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2E2418),
+          border: Border.all(color: BrutalTheme.inkBlack, width: 1),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.movie_outlined,
+                  size: 16,
+                  color: Color(0xFFF1E7D1),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'SHORT CLIP',
+                  style: GoogleFonts.spaceMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.0,
+                    color: const Color(0xFFF1E7D1),
+                  ),
+                ),
+                const Spacer(),
+                if (bytes != null)
+                  Text(
+                    _formatClipSize(bytes.length),
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 9.5,
+                      color: const Color(0xFFBCAD8F),
+                    ),
+                  ),
+              ],
+            ),
+            if (memory.displayCaption.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                memory.displayCaption,
+                style: GoogleFonts.caveat(
+                  fontSize: 16.5,
+                  color: const Color(0xFFF1E7D1),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -466,7 +586,7 @@ class _DiaryTabState extends State<DiaryTab> {
                         children: [
                           Expanded(
                             child: Text(
-                              memory.photoCaption ?? '',
+                              memory.displayCaption,
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.caveat(
@@ -475,7 +595,7 @@ class _DiaryTabState extends State<DiaryTab> {
                               ),
                             ),
                           ),
-                          if (memory.photoCaption != null) ...[
+                          if (memory.displayCaption.isNotEmpty) ...[
                             const SizedBox(width: 8),
                             Text(
                               'hd photo',
@@ -635,6 +755,47 @@ class _DiaryTabState extends State<DiaryTab> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+String _formatClipSize(int bytes) {
+  if (bytes >= 1024 * 1024) {
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+  return '${(bytes / 1024).ceil()} KB';
+}
+
+/// Small brutalist text action shown on the contributor's own memories.
+class _MemoryAction extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _MemoryAction({Key? key, required this.label, required this.onTap})
+    : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: BrutalTheme.paper2,
+          border: Border.all(color: const Color(0xFFCBBB97), width: 1),
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.spaceMono(
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8,
+            color: BrutalTheme.inkBlack,
+          ),
         ),
       ),
     );

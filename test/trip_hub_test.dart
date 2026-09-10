@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:road_song/models/trip_models.dart';
+import 'package:road_song/screens/add_memory_sheet.dart';
 import 'package:road_song/screens/diary_tab.dart';
 import 'package:road_song/screens/route_tab.dart';
 
@@ -78,7 +79,9 @@ void main() {
             onAddMemory: onAddMemory,
             onOpenSong: onOpenSong ?? () {},
             onSwitchTrip: onSwitchTrip ?? () {},
-            pickPhotoBytes: () async => Uint8List.fromList(kTransparentPng),
+            mediaPickers: MemoryMediaPickers(
+              photoFromGallery: () async => Uint8List.fromList(kTransparentPng),
+            ),
           ),
         ),
       );
@@ -226,7 +229,7 @@ void main() {
         'Sintra, the wrong hill',
       );
       await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('attach-photo')));
+      await tester.tap(find.byKey(const ValueKey('memory-type-gallery')));
       await tester.pumpAndSettle();
       expect(find.text('Photo attached'), findsOneWidget);
 

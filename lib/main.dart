@@ -17,8 +17,13 @@ void main() {
 
 class RoadSongApp extends StatelessWidget {
   final TripStore? tripStore;
+  final MemoryMediaPickers mediaPickers;
 
-  const RoadSongApp({Key? key, this.tripStore}) : super(key: key);
+  const RoadSongApp({
+    Key? key,
+    this.tripStore,
+    this.mediaPickers = const MemoryMediaPickers(),
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +35,7 @@ class RoadSongApp extends StatelessWidget {
         primaryColor: BrutalTheme.primary,
         useMaterial3: true,
       ),
-      home: OnboardingFlow(tripStore: tripStore),
+      home: OnboardingFlow(tripStore: tripStore, mediaPickers: mediaPickers),
     );
   }
 }
@@ -38,8 +43,13 @@ class RoadSongApp extends StatelessWidget {
 /// Entry flow: Welcome → Create Trip → Invite Crew → Main Shell.
 class OnboardingFlow extends StatefulWidget {
   final TripStore? tripStore;
+  final MemoryMediaPickers mediaPickers;
 
-  const OnboardingFlow({Key? key, this.tripStore}) : super(key: key);
+  const OnboardingFlow({
+    Key? key,
+    this.tripStore,
+    this.mediaPickers = const MemoryMediaPickers(),
+  }) : super(key: key);
 
   @override
   _OnboardingFlowState createState() => _OnboardingFlowState();
@@ -111,7 +121,10 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
           onOpenDiary: _openDiary,
         );
       case 3:
-        return MainShell(tripStore: _tripStore);
+        return MainShell(
+          tripStore: _tripStore,
+          mediaPickers: widget.mediaPickers,
+        );
       default:
         return WelcomeScreen(
           onStart: _goToCreate,
@@ -125,8 +138,13 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
 /// The trip home hub: Diary / Route / Song tab browsing foundation.
 class MainShell extends StatefulWidget {
   final TripStore? tripStore;
+  final MemoryMediaPickers mediaPickers;
 
-  const MainShell({Key? key, this.tripStore}) : super(key: key);
+  const MainShell({
+    Key? key,
+    this.tripStore,
+    this.mediaPickers = const MemoryMediaPickers(),
+  }) : super(key: key);
 
   @override
   _MainShellState createState() => _MainShellState();
@@ -155,7 +173,9 @@ class _MainShellState extends State<MainShell> {
   int _currentTab = _diaryIndex;
   String _selectedTripName = _demoTripNames.first;
 
-  final Map<String, List<TimelineMemory>> _tripMemories = {
+  /// Canned memories for the browseable demo trips. Real trips keep their
+  /// memories in the [TripStore]; these fixtures never touch storage.
+  final Map<String, List<TimelineMemory>> _demoTripMemories = {
     "Cabo Fail '23": const [
       TimelineMemory(
         id: 'mem-1',
@@ -319,6 +339,17 @@ class _MainShellState extends State<MainShell> {
     if (trips.isNotEmpty) {
       _selectedTripName = trips.last.name;
     }
+    widget.tripStore?.addListener(_onStoreChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.tripStore?.removeListener(_onStoreChanged);
+    super.dispose();
+  }
+
+  void _onStoreChanged() {
+    if (mounted) setState(() {});
   }
 
   List<Trip> get _createdTrips => widget.tripStore?.trips ?? const [];
@@ -338,12 +369,62 @@ class _MainShellState extends State<MainShell> {
     return _demoTripDateRanges[_selectedTripName];
   }
 
-  List<TimelineMemory> get _activeMemories =>
-      _tripMemories[_selectedTripName] ?? const [];
+  /// The user-created trip currently selected, when one matches the picker.
+  Trip? get _selectedCreatedTrip {
+    for (final Trip trip in _createdTrips) {
+      if (trip.name == _selectedTripName) return trip;
+    }
+    return null;
+  }
+
+  List<TimelineMemory> get _activeMemories {
+    final Trip? trip = _selectedCreatedTrip;
+    if (trip != null) {
+      return widget.tripStore?.memoriesFor(trip.id) ?? trip.memories;
+    }
+    return _demoTripMemories[_selectedTripName] ?? const [];
+  }
 
   void _addMemory(TimelineMemory memory) {
+    final Trip? trip = _selectedCreatedTrip;
+    final TripStore? store = widget.tripStore;
+    if (trip != null && store != null) {
+      store.addMemory(trip.id, memory);
+      return;
+    }
     setState(() {
-      _tripMemories.putIfAbsent(_selectedTripName, () => []).add(memory);
+      _demoTripMemories.putIfAbsent(_selectedTripName, () => []).add(memory);
+    });
+  }
+
+  void _updateMemory(TimelineMemory memory) {
+    final Trip? trip = _selectedCreatedTrip;
+    final TripStore? store = widget.tripStore;
+    if (trip != null && store != null) {
+      store.updateMemory(trip.id, memory);
+      return;
+    }
+    setState(() {
+      final List<TimelineMemory> memories = _demoTripMemories.putIfAbsent(
+        _selectedTripName,
+        () => [],
+      );
+      final int index = memories.indexWhere((m) => m.id == memory.id);
+      if (index != -1) memories[index] = memory;
+    });
+  }
+
+  void _deleteMemory(TimelineMemory memory) {
+    final Trip? trip = _selectedCreatedTrip;
+    final TripStore? store = widget.tripStore;
+    if (trip != null && store != null) {
+      store.deleteMemory(trip.id, memory.id);
+      return;
+    }
+    setState(() {
+      _demoTripMemories[_selectedTripName]?.removeWhere(
+        (m) => m.id == memory.id,
+      );
     });
   }
 
@@ -369,7 +450,8 @@ class _MainShellState extends State<MainShell> {
       ];
     }
     final List<String> names = [];
-    for (final TimelineMemory memory in _tripMemories[tripName] ?? const []) {
+    for (final TimelineMemory memory
+        in _demoTripMemories[tripName] ?? const []) {
       final String name = memory.author.replaceFirst('@', '').trim();
       if (name.isEmpty || name == 'group' || names.contains(name)) continue;
       names.add(name[0].toUpperCase() + name.substring(1));
@@ -413,9 +495,11 @@ class _MainShellState extends State<MainShell> {
             tripDateRange: _activeDateRange,
             memories: memories,
             onAddMemory: _addMemory,
+            onUpdateMemory: _updateMemory,
+            onDeleteMemory: _deleteMemory,
             onOpenSong: () => _navigateToTab(_songIndex),
             onSwitchTrip: _showTripPicker,
-            pickPhotoBytes: pickPhotoFromGallery,
+            mediaPickers: widget.mediaPickers,
           ),
           RouteTab(
             tripName: _selectedTripName,
