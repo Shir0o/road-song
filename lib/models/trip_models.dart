@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'song_models.dart';
 export '../services/trip_store.dart';
 
 /// A draft of a new trip being created during onboarding.
@@ -130,6 +131,11 @@ class Trip {
   final DateTime createdAt;
   final List<TimelineMemory> memories;
 
+  /// The latest lyric draft ("Write our song" output), persisted with the
+  /// trip so hand edits and rewrites survive restarts. Null until the song
+  /// has been written once.
+  final LyricSong? song;
+
   const Trip({
     required this.id,
     required this.name,
@@ -140,6 +146,7 @@ class Trip {
     required this.sessionLink,
     required this.createdAt,
     this.memories = const [],
+    this.song,
   });
 
   String get dateRange => '$firstDay – $lastDay';
@@ -165,6 +172,7 @@ class Trip {
     String? sessionLink,
     DateTime? createdAt,
     List<TimelineMemory>? memories,
+    LyricSong? song,
   }) {
     return Trip(
       id: id ?? this.id,
@@ -176,6 +184,7 @@ class Trip {
       sessionLink: sessionLink ?? this.sessionLink,
       createdAt: createdAt ?? this.createdAt,
       memories: memories ?? this.memories,
+      song: song ?? this.song,
     );
   }
 
@@ -190,6 +199,7 @@ class Trip {
       'sessionLink': sessionLink,
       'createdAt': createdAt.toIso8601String(),
       'memories': memories.map((m) => m.toJson()).toList(),
+      'song': song?.toJson(),
     };
   }
 
@@ -216,6 +226,9 @@ class Trip {
               )
               .toList() ??
           const [],
+      song: json['song'] == null
+          ? null
+          : LyricSong.fromJson(json['song'] as Map<String, dynamic>),
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/song_models.dart';
 import '../models/trip_models.dart';
 
 /// Abstract storage seam for trip creation, persistence, and retrieval.
@@ -30,6 +31,14 @@ abstract class TripStore extends ChangeNotifier {
 
   /// Removes the memory with [memoryId] from [tripId].
   Future<void> deleteMemory(String tripId, String memoryId);
+
+  /// The latest lyric draft for [tripId], or null when the song has not been
+  /// written yet.
+  LyricSong? songFor(String tripId);
+
+  /// Persists [song] as the lyric draft of [tripId], replacing any previous
+  /// draft. Hand edits and rewrites survive restarts through this seam.
+  Future<void> saveSong(String tripId, LyricSong song);
 }
 
 /// Fast, in-memory implementation of [TripStore] for tests and transient
@@ -142,6 +151,21 @@ class InMemoryTripStore extends ChangeNotifier implements TripStore {
       tripId,
       (current) => current..removeWhere((m) => m.id == memoryId),
     );
+  }
+
+  @override
+  LyricSong? songFor(String tripId) {
+    final int index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return null;
+    return _trips[index].song;
+  }
+
+  @override
+  Future<void> saveSong(String tripId, LyricSong song) async {
+    final int index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return;
+    _trips[index] = _trips[index].copyWith(song: song);
+    notifyListeners();
   }
 }
 
@@ -284,5 +308,22 @@ class PreferencesTripStore extends ChangeNotifier implements TripStore {
       tripId,
       (current) => current..removeWhere((m) => m.id == memoryId),
     );
+  }
+
+  @override
+  LyricSong? songFor(String tripId) {
+    final int index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return null;
+    return _trips[index].song;
+  }
+
+  @override
+  Future<void> saveSong(String tripId, LyricSong song) async {
+    if (!_initialized) await init();
+    final int index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return;
+    _trips[index] = _trips[index].copyWith(song: song);
+    await _persist();
+    notifyListeners();
   }
 }

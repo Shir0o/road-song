@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../models/song_models.dart';
 import '../models/trip_models.dart';
 import 'trip_store.dart';
 
@@ -403,7 +404,9 @@ class RemoteTripStore extends ChangeNotifier implements TripStore {
     // Local-only memories (not yet on the backend) keep their place at the
     // end, in contribution order.
     merged.addAll(byId.values);
-    _trips[index] = remote.copyWith(memories: merged);
+    // The lyric draft is a local mirror artifact (the backend has no lyrics
+    // endpoint in v1); keep the local song across polls.
+    _trips[index] = remote.copyWith(memories: merged, song: local.song);
     notifyListeners();
   }
 
@@ -486,6 +489,21 @@ class RemoteTripStore extends ChangeNotifier implements TripStore {
       List<TimelineMemory>.from(_trips[index].memories),
     );
     _trips[index] = _trips[index].copyWith(memories: updated);
+    notifyListeners();
+  }
+
+  @override
+  LyricSong? songFor(String tripId) {
+    final int index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return null;
+    return _trips[index].song;
+  }
+
+  @override
+  Future<void> saveSong(String tripId, LyricSong song) async {
+    final int index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return;
+    _trips[index] = _trips[index].copyWith(song: song);
     notifyListeners();
   }
 
