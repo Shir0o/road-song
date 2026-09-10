@@ -144,6 +144,17 @@ class Trip {
 
   String get dateRange => '$firstDay – $lastDay';
 
+  /// The trip code from the session link (`roadsong.app/t/<code>`), or the
+  /// trip id when the link has no code shape. The backend scopes all access
+  /// by this code.
+  String get code {
+    final RegExpMatch? match = RegExp(
+      r'^(?:https?://)?(?:roadsong\.app/)?/?t/([A-Za-z0-9-]+)$',
+    ).firstMatch(sessionLink);
+    if (match != null) return match.group(1)!;
+    return id;
+  }
+
   Trip copyWith({
     String? id,
     String? name,
@@ -189,12 +200,14 @@ class Trip {
       firstDay: json['firstDay'] as String? ?? '',
       lastDay: json['lastDay'] as String? ?? '',
       coverIndex: json['coverIndex'] as int? ?? 0,
-      crew: (json['crew'] as List<dynamic>?)
+      crew:
+          (json['crew'] as List<dynamic>?)
               ?.map((item) => CrewMember.fromJson(item as Map<String, dynamic>))
               .toList() ??
           const [],
       sessionLink: json['sessionLink'] as String? ?? '',
-      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
+      createdAt:
+          DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.now(),
       memories:
           (json['memories'] as List<dynamic>?)

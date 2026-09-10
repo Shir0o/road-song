@@ -40,6 +40,7 @@ dependencies:
   audioplayers: ^6.0.0
   qr: ^3.0.2
   image_picker: ^1.2.3
+  share_plus: ^13.3.0
 
 dev_dependencies:
   flutter_test:

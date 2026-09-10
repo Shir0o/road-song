@@ -83,6 +83,7 @@ class DiaryTab extends StatefulWidget {
   final ValueChanged<TimelineMemory>? onDeleteMemory;
   final VoidCallback onOpenSong;
   final VoidCallback onSwitchTrip;
+  final VoidCallback? onShareTrip;
   final MemoryMediaPickers mediaPickers;
 
   const DiaryTab({
@@ -95,6 +96,7 @@ class DiaryTab extends StatefulWidget {
     this.onDeleteMemory,
     required this.onOpenSong,
     required this.onSwitchTrip,
+    this.onShareTrip,
     this.mediaPickers = const MemoryMediaPickers(),
   }) : super(key: key);
 
@@ -315,6 +317,20 @@ class _DiaryTabState extends State<DiaryTab> {
                   ),
                 ),
               ],
+            ),
+          ),
+          GestureDetector(
+            key: const ValueKey('share-trip'),
+            onTap: widget.onShareTrip,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+              child: Icon(
+                Icons.ios_share,
+                size: 20,
+                color: widget.onShareTrip == null
+                    ? BrutalTheme.graphite.withOpacity(0.4)
+                    : BrutalTheme.primary,
+              ),
             ),
           ),
           GestureDetector(
