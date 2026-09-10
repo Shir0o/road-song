@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -117,7 +118,7 @@ class GuestDrop {
   bool get isVideo => type == GuestDropType.video;
 }
 
-/// A fully created trip with its crew and session link.
+/// A fully created trip with its crew, session link, and contributed memories.
 class Trip {
   final String id;
   final String name;
@@ -127,6 +128,7 @@ class Trip {
   final List<CrewMember> crew;
   final String sessionLink;
   final DateTime createdAt;
+  final List<TimelineMemory> memories;
 
   const Trip({
     required this.id,
@@ -137,6 +139,7 @@ class Trip {
     required this.crew,
     required this.sessionLink,
     required this.createdAt,
+    this.memories = const [],
   });
 
   String get dateRange => '$firstDay – $lastDay';
@@ -150,6 +153,7 @@ class Trip {
     List<CrewMember>? crew,
     String? sessionLink,
     DateTime? createdAt,
+    List<TimelineMemory>? memories,
   }) {
     return Trip(
       id: id ?? this.id,
@@ -160,6 +164,7 @@ class Trip {
       crew: crew ?? this.crew,
       sessionLink: sessionLink ?? this.sessionLink,
       createdAt: createdAt ?? this.createdAt,
+      memories: memories ?? this.memories,
     );
   }
 
@@ -173,6 +178,7 @@ class Trip {
       'crew': crew.map((c) => c.toJson()).toList(),
       'sessionLink': sessionLink,
       'createdAt': createdAt.toIso8601String(),
+      'memories': memories.map((m) => m.toJson()).toList(),
     };
   }
 
@@ -190,17 +196,39 @@ class Trip {
       sessionLink: json['sessionLink'] as String? ?? '',
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? '') ??
           DateTime.now(),
+      memories:
+          (json['memories'] as List<dynamic>?)
+              ?.map(
+                (item) => TimelineMemory.fromJson(item as Map<String, dynamic>),
+              )
+              .toList() ??
+          const [],
     );
   }
 }
 
-/// A single memory in a trip diary: a note, optionally pinned to a place and
-/// carrying a photo. Pinned memories (with [locationName]) become stops on the
-/// trip route; nullable [latitude]/[longitude] are stored from day one so a
-/// real map can be dropped in later without a data migration.
+/// The kind of media a memory carries. Photos cover both gallery and camera
+/// captures; [text] is lore with no media attachment.
+enum MemoryType { photo, video, text }
+
+/// The trip's local anonymous creator identity — v1 has no accounts, so the
+/// person holding the device is the contributor for anything added in-app.
+const String kCreatorHandle = '@you';
+const String kCreatorName = 'You';
+
+/// A single memory in a trip diary: media or lore, optionally pinned to a
+/// place. Pinned memories (with [locationName]) become stops on the trip
+/// route; nullable [latitude]/[longitude] are stored from day one so a real
+/// map can be dropped in later without a data migration.
 class TimelineMemory {
   final String id;
+
+  /// Display handle of the contributor (e.g. `@you`, `@maya`).
   final String author;
+
+  /// Display name signed on the memory (e.g. `You`, `Maya`). Falls back to
+  /// [author] for fixtures that only carry a handle.
+  final String contributor;
   final String time;
   final String text;
 
@@ -209,6 +237,10 @@ class TimelineMemory {
 
   /// Optional date label shown in the day header (e.g. 'JUN 12').
   final String? dayDate;
+
+  /// When the memory was actually created. Null on canned fixtures that only
+  /// carry the display [time].
+  final DateTime? createdAt;
 
   /// Place name of the pinned location milestone, if the memory was pinned.
   final String? locationName;
@@ -224,7 +256,27 @@ class TimelineMemory {
   final String? photoCaption;
   final Uint8List? photoBytes;
 
-  // Legacy timeline node styling (Evidence screen + canned fixtures).
+  /// Short video clip reference: a remote [videoUrl] or raw [videoBytes] for
+  /// in-app clips. The bytes are never decoded by the UI or by tests.
+  final String? videoUrl;
+  final Uint8List? videoBytes;
+
+  /// Contributor-editable caption shown on the memory card.
+  final String caption;
+
+  final MemoryType? _mediaType;
+
+  /// The memory's media kind. Explicit when set by the composer; otherwise
+  /// derived from the attached media so legacy fixtures stay meaningful.
+  MemoryType get type {
+    if (_mediaType != null) return _mediaType;
+    if (hasVideo) return MemoryType.video;
+    if (hasPhoto) return MemoryType.photo;
+    return MemoryType.text;
+  }
+
+  // Legacy timeline node styling (Evidence screen + canned fixtures). It is
+  // not persisted: only [rotationDegrees] and [authorColor] round-trip.
   final IconData icon;
   final Color iconBg;
   final Color iconColor;
@@ -238,8 +290,10 @@ class TimelineMemory {
     required this.author,
     required this.time,
     required this.text,
+    this.contributor = '',
     this.day = 1,
     this.dayDate,
+    this.createdAt,
     this.locationName,
     this.latitude,
     this.longitude,
@@ -248,18 +302,150 @@ class TimelineMemory {
     this.imageUrl,
     this.photoCaption,
     this.photoBytes,
+    this.videoUrl,
+    this.videoBytes,
+    this.caption = '',
+    MemoryType? type,
     this.icon = Icons.notes,
     this.iconBg = const Color(0xFFF1E7D1),
     this.iconColor = Colors.black,
     this.category,
     this.authorColor,
     this.rotationDegrees = 0.0,
-  });
+  }) : _mediaType = type;
 
   bool get hasPhoto => imageUrl != null || photoBytes != null;
 
+  bool get hasVideo => videoUrl != null || videoBytes != null;
+
+  /// Caption a card should show, falling back to the legacy polaroid label.
+  String get displayCaption =>
+      caption.isNotEmpty ? caption : (photoCaption ?? '');
+
+  /// Contributor name a card should show, falling back to the handle.
+  String get displayContributor =>
+      contributor.isNotEmpty ? contributor : author;
+
   /// Whether this memory is a pin-able route stop.
   bool get isPinned => locationName != null && locationName!.trim().isNotEmpty;
+
+  TimelineMemory copyWith({
+    String? id,
+    String? author,
+    String? contributor,
+    String? time,
+    String? text,
+    int? day,
+    String? dayDate,
+    DateTime? createdAt,
+    String? locationName,
+    double? latitude,
+    double? longitude,
+    int? likes,
+    bool? likedByMe,
+    String? imageUrl,
+    String? photoCaption,
+    Uint8List? photoBytes,
+    String? videoUrl,
+    Uint8List? videoBytes,
+    String? caption,
+    MemoryType? type,
+    IconData? icon,
+    Color? iconBg,
+    Color? iconColor,
+    String? category,
+    Color? authorColor,
+    double? rotationDegrees,
+  }) {
+    return TimelineMemory(
+      id: id ?? this.id,
+      author: author ?? this.author,
+      contributor: contributor ?? this.contributor,
+      time: time ?? this.time,
+      text: text ?? this.text,
+      day: day ?? this.day,
+      dayDate: dayDate ?? this.dayDate,
+      createdAt: createdAt ?? this.createdAt,
+      locationName: locationName ?? this.locationName,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      likes: likes ?? this.likes,
+      likedByMe: likedByMe ?? this.likedByMe,
+      imageUrl: imageUrl ?? this.imageUrl,
+      photoCaption: photoCaption ?? this.photoCaption,
+      photoBytes: photoBytes ?? this.photoBytes,
+      videoUrl: videoUrl ?? this.videoUrl,
+      videoBytes: videoBytes ?? this.videoBytes,
+      caption: caption ?? this.caption,
+      type: type ?? _mediaType,
+      icon: icon ?? this.icon,
+      iconBg: iconBg ?? this.iconBg,
+      iconColor: iconColor ?? this.iconColor,
+      category: category ?? this.category,
+      authorColor: authorColor ?? this.authorColor,
+      rotationDegrees: rotationDegrees ?? this.rotationDegrees,
+    );
+  }
+
+  /// JSON round-trip used by [PreferencesTripStore]; photo and video bytes are
+  /// base64-encoded so SharedPreferences can carry them.
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'author': author,
+      'contributor': contributor,
+      'time': time,
+      'text': text,
+      'day': day,
+      'dayDate': dayDate,
+      'createdAt': createdAt?.toIso8601String(),
+      'locationName': locationName,
+      'latitude': latitude,
+      'longitude': longitude,
+      'likes': likes,
+      'likedByMe': likedByMe,
+      'imageUrl': imageUrl,
+      'photoCaption': photoCaption,
+      'photoBytes': photoBytes == null ? null : base64Encode(photoBytes!),
+      'videoUrl': videoUrl,
+      'videoBytes': videoBytes == null ? null : base64Encode(videoBytes!),
+      'caption': caption,
+      'type': type.name,
+      'authorColor': authorColor?.toARGB32(),
+      'rotationDegrees': rotationDegrees,
+    };
+  }
+
+  factory TimelineMemory.fromJson(Map<String, dynamic> json) {
+    final String? rawPhoto = json['photoBytes'] as String?;
+    final String? rawVideo = json['videoBytes'] as String?;
+    return TimelineMemory(
+      id: json['id'] as String,
+      author: json['author'] as String? ?? kCreatorHandle,
+      contributor: json['contributor'] as String? ?? '',
+      time: json['time'] as String? ?? '',
+      text: json['text'] as String? ?? '',
+      day: json['day'] as int? ?? 1,
+      dayDate: json['dayDate'] as String?,
+      createdAt: DateTime.tryParse(json['createdAt'] as String? ?? ''),
+      locationName: json['locationName'] as String?,
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
+      likes: json['likes'] as int? ?? 0,
+      likedByMe: json['likedByMe'] as bool? ?? false,
+      imageUrl: json['imageUrl'] as String?,
+      photoCaption: json['photoCaption'] as String?,
+      photoBytes: rawPhoto == null ? null : base64Decode(rawPhoto),
+      videoUrl: json['videoUrl'] as String?,
+      videoBytes: rawVideo == null ? null : base64Decode(rawVideo),
+      caption: json['caption'] as String? ?? '',
+      type: MemoryType.values.asNameMap()[json['type'] as String?],
+      authorColor: json['authorColor'] == null
+          ? null
+          : Color(json['authorColor'] as int),
+      rotationDegrees: (json['rotationDegrees'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
 }
 
 /// A positioned label pin for the legacy Evidence map overlay.

@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/trip_models.dart';
 
 /// Abstract storage seam for trip creation, persistence, and retrieval.
+///
+/// Screens talk to this seam only — never to storage directly.
 abstract class TripStore extends ChangeNotifier {
   factory TripStore() => InMemoryTripStore();
   factory TripStore.inMemory() => InMemoryTripStore();
@@ -16,12 +18,31 @@ abstract class TripStore extends ChangeNotifier {
   Future<void> addTrip(Trip trip);
   Future<void> setActiveTrip(String tripId);
   Future<void> addCrewMember(String tripId, CrewMember member);
+
+  /// Memories contributed to [tripId], in contribution order.
+  List<TimelineMemory> memoriesFor(String tripId);
+
+  /// Adds a memory to [tripId], replacing any existing memory with the same id.
+  Future<void> addMemory(String tripId, TimelineMemory memory);
+
+  /// Replaces the memory with the same id on [tripId] (adds it when absent).
+  Future<void> updateMemory(String tripId, TimelineMemory memory);
+
+  /// Removes the memory with [memoryId] from [tripId].
+  Future<void> deleteMemory(String tripId, String memoryId);
 }
 
-/// Fast, in-memory implementation of [TripStore] for tests and transient sessions.
+/// Fast, in-memory implementation of [TripStore] for tests and transient
+/// sessions. Construct it with preset [trips]/[activeTripId] to start a test
+/// from an already-populated trip.
 class InMemoryTripStore extends ChangeNotifier implements TripStore {
   final List<Trip> _trips = [];
   String? _activeTripId;
+
+  InMemoryTripStore({List<Trip> trips = const [], String? activeTripId}) {
+    _trips.addAll(trips);
+    _activeTripId = activeTripId;
+  }
 
   @override
   List<Trip> get trips => List.unmodifiable(_trips);
@@ -72,10 +93,60 @@ class InMemoryTripStore extends ChangeNotifier implements TripStore {
       notifyListeners();
     }
   }
+
+  @override
+  List<TimelineMemory> memoriesFor(String tripId) {
+    final index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return const [];
+    return List.unmodifiable(_trips[index].memories);
+  }
+
+  /// Applies [mutate] to a trip's memories and returns true when it changed.
+  bool _mutateMemories(
+    String tripId,
+    List<TimelineMemory> Function(List<TimelineMemory> current) mutate,
+  ) {
+    final index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return false;
+    final updated = mutate(List<TimelineMemory>.from(_trips[index].memories));
+    _trips[index] = _trips[index].copyWith(memories: updated);
+    notifyListeners();
+    return true;
+  }
+
+  @override
+  Future<void> addMemory(String tripId, TimelineMemory memory) async {
+    _mutateMemories(tripId, (current) {
+      current.removeWhere((m) => m.id == memory.id);
+      current.add(memory);
+      return current;
+    });
+  }
+
+  @override
+  Future<void> updateMemory(String tripId, TimelineMemory memory) async {
+    _mutateMemories(tripId, (current) {
+      final index = current.indexWhere((m) => m.id == memory.id);
+      if (index == -1) {
+        current.add(memory);
+      } else {
+        current[index] = memory;
+      }
+      return current;
+    });
+  }
+
+  @override
+  Future<void> deleteMemory(String tripId, String memoryId) async {
+    _mutateMemories(
+      tripId,
+      (current) => current..removeWhere((m) => m.id == memoryId),
+    );
+  }
 }
 
-/// SharedPreferences-backed [TripStore] that serializes trip metadata to JSON,
-/// allowing trips and crew members to survive app restarts.
+/// SharedPreferences-backed [TripStore] that serializes trips (including crew
+/// and memories) to JSON, allowing them to survive app restarts.
 class PreferencesTripStore extends ChangeNotifier implements TripStore {
   static const String _tripsKey = 'road_song_saved_trips_v1';
   static const String _activeTripKey = 'road_song_active_trip_id_v1';
@@ -163,5 +234,55 @@ class PreferencesTripStore extends ChangeNotifier implements TripStore {
       await _persist();
       notifyListeners();
     }
+  }
+
+  @override
+  List<TimelineMemory> memoriesFor(String tripId) {
+    final index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return const [];
+    return List.unmodifiable(_trips[index].memories);
+  }
+
+  Future<void> _mutateMemories(
+    String tripId,
+    List<TimelineMemory> Function(List<TimelineMemory> current) mutate,
+  ) async {
+    if (!_initialized) await init();
+    final index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return;
+    final updated = mutate(List<TimelineMemory>.from(_trips[index].memories));
+    _trips[index] = _trips[index].copyWith(memories: updated);
+    await _persist();
+    notifyListeners();
+  }
+
+  @override
+  Future<void> addMemory(String tripId, TimelineMemory memory) {
+    return _mutateMemories(tripId, (current) {
+      current.removeWhere((m) => m.id == memory.id);
+      current.add(memory);
+      return current;
+    });
+  }
+
+  @override
+  Future<void> updateMemory(String tripId, TimelineMemory memory) {
+    return _mutateMemories(tripId, (current) {
+      final index = current.indexWhere((m) => m.id == memory.id);
+      if (index == -1) {
+        current.add(memory);
+      } else {
+        current[index] = memory;
+      }
+      return current;
+    });
+  }
+
+  @override
+  Future<void> deleteMemory(String tripId, String memoryId) {
+    return _mutateMemories(
+      tripId,
+      (current) => current..removeWhere((m) => m.id == memoryId),
+    );
   }
 }

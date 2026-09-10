@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:road_song/main.dart';
 import 'package:road_song/models/trip_models.dart';
+import 'package:road_song/screens/add_memory_sheet.dart';
 import 'package:road_song/widgets/brutal_widgets.dart';
 import 'package:road_song/screens/typewriter_screen.dart';
 import 'package:road_song/screens/evidence_screen.dart';
@@ -480,6 +482,388 @@ void main() {
         expect(find.text('Write our song'), findsOneWidget);
       },
     );
+  });
+
+  group('Add Memory Flow Tests', () {
+    /// 1x1 transparent PNG — a decodable photo fixture.
+    const List<int> kPng = [
+      0x89,
+      0x50,
+      0x4E,
+      0x47,
+      0x0D,
+      0x0A,
+      0x1A,
+      0x0A,
+      0x00,
+      0x00,
+      0x00,
+      0x0D,
+      0x49,
+      0x48,
+      0x44,
+      0x52,
+      0x00,
+      0x00,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      0x00,
+      0x01,
+      0x08,
+      0x06,
+      0x00,
+      0x00,
+      0x00,
+      0x1F,
+      0x15,
+      0xC4,
+      0x89,
+      0x00,
+      0x00,
+      0x00,
+      0x0A,
+      0x49,
+      0x44,
+      0x41,
+      0x54,
+      0x78,
+      0x9C,
+      0x63,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      0x05,
+      0x00,
+      0x01,
+      0x0D,
+      0x0A,
+      0x2D,
+      0xB4,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x49,
+      0x45,
+      0x4E,
+      0x44,
+      0xAE,
+      0x42,
+      0x60,
+      0x82,
+    ];
+
+    final Trip lisbonTrip = Trip(
+      id: 'trip-mem',
+      name: 'Lisbon Trip',
+      firstDay: 'JUN 12',
+      lastDay: 'JUN 18',
+      coverIndex: 1,
+      crew: const [
+        CrewMember(
+          id: 'user-1',
+          name: 'Maya',
+          handle: '@maya',
+          initial: 'M',
+          color: Color(0xFF7D8663),
+          invited: true,
+        ),
+      ],
+      sessionLink: 'roadsong.app/t/lisbon-trip',
+      createdAt: DateTime(2026, 6, 12),
+    );
+
+    MemoryMediaPickers fakePickers({
+      Uint8List? gallery,
+      Uint8List? camera,
+      Uint8List? video,
+    }) {
+      return MemoryMediaPickers(
+        photoFromGallery: () async => gallery,
+        photoFromCamera: () async => camera,
+        videoClip: () async => video,
+      );
+    }
+
+    Future<InMemoryTripStore> pumpTripApp(
+      WidgetTester tester, {
+      MemoryMediaPickers? pickers,
+      List<TimelineMemory> memories = const [],
+    }) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final store = InMemoryTripStore(
+        trips: [lisbonTrip.copyWith(memories: memories)],
+        activeTripId: lisbonTrip.id,
+      );
+      await tester.pumpWidget(
+        RoadSongApp(tripStore: store, mediaPickers: pickers ?? fakePickers()),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Resume trip'));
+      await tester.pumpAndSettle();
+      return store;
+    }
+
+    /// Drives the Add Memory sheet: optional media type, then note/caption/
+    /// place, then submit.
+    Future<void> compose(
+      WidgetTester tester, {
+      String? type,
+      String note = '',
+      String? caption,
+      String? place,
+    }) async {
+      await tester.tap(find.byKey(const ValueKey('add-memory-fab')));
+      await tester.pumpAndSettle();
+      if (type != null) {
+        await tester.tap(find.byKey(ValueKey('memory-type-$type')));
+        await tester.pumpAndSettle();
+      }
+      if (note.isNotEmpty) {
+        await tester.enterText(find.byKey(const ValueKey('memory-note')), note);
+      }
+      if (caption != null) {
+        await tester.enterText(
+          find.byKey(const ValueKey('memory-caption')),
+          caption,
+        );
+      }
+      if (place != null) {
+        await tester.enterText(
+          find.byKey(const ValueKey('memory-place')),
+          place,
+        );
+      }
+      await tester.pump();
+      await tester.tap(find.text('Paste it in the scrapbook'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('photo memories from gallery and camera land in the trip', (
+      WidgetTester tester,
+    ) async {
+      final store = await pumpTripApp(
+        tester,
+        pickers: fakePickers(
+          gallery: Uint8List.fromList(kPng),
+          camera: Uint8List.fromList(kPng),
+        ),
+      );
+      expect(find.text('No memories yet.'), findsOneWidget);
+
+      await compose(
+        tester,
+        type: 'gallery',
+        note: 'The churro incident.',
+        caption: 'churro oclock',
+        place: 'Marina Pier',
+      );
+
+      final galleryMemory = store.memoriesFor(lisbonTrip.id).single;
+      expect(galleryMemory.type, MemoryType.photo);
+      expect(galleryMemory.photoBytes, Uint8List.fromList(kPng));
+      expect(galleryMemory.author, '@you');
+      expect(galleryMemory.contributor, 'You');
+      expect(galleryMemory.caption, 'churro oclock');
+      expect(galleryMemory.createdAt, isNotNull);
+      expect(galleryMemory.locationName, 'Marina Pier');
+      expect(galleryMemory.latitude, isNull);
+      expect(galleryMemory.longitude, isNull);
+      expect(find.textContaining('churro incident'), findsOneWidget);
+      expect(find.text('churro oclock'), findsOneWidget);
+
+      await compose(tester, type: 'camera', note: 'Camera moment');
+
+      final memories = store.memoriesFor(lisbonTrip.id);
+      expect(memories, hasLength(2));
+      expect(memories.last.text, 'Camera moment');
+      expect(memories.last.type, MemoryType.photo);
+      expect(memories.last.photoBytes, isNotNull);
+      expect(find.text('Camera moment'), findsOneWidget);
+    });
+
+    testWidgets('video clip and lore memories land in the trip', (
+      WidgetTester tester,
+    ) async {
+      final videoBytes = Uint8List.fromList(List.filled(4096, 7));
+      final store = await pumpTripApp(
+        tester,
+        pickers: fakePickers(
+          gallery: Uint8List.fromList(kPng),
+          video: videoBytes,
+        ),
+      );
+
+      await compose(
+        tester,
+        type: 'video',
+        note: 'Tram 28, all of us.',
+        caption: 'the tram ride',
+        place: 'Rua Garrett, Lisbon',
+      );
+
+      final videoMemory = store.memoriesFor(lisbonTrip.id).single;
+      expect(videoMemory.type, MemoryType.video);
+      expect(videoMemory.videoBytes, videoBytes);
+      expect(videoMemory.locationName, 'Rua Garrett, Lisbon');
+      expect(videoMemory.latitude, isNull);
+      expect(find.byKey(ValueKey('clip-${videoMemory.id}')), findsOneWidget);
+      expect(find.text('SHORT CLIP'), findsOneWidget);
+      expect(find.text('the tram ride'), findsOneWidget);
+
+      await compose(tester, type: 'text', note: 'Inside joke: the wrong hill.');
+
+      final memories = store.memoriesFor(lisbonTrip.id);
+      expect(memories, hasLength(2));
+      expect(memories.last.type, MemoryType.text);
+      expect(memories.last.hasPhoto, isFalse);
+      expect(memories.last.hasVideo, isFalse);
+      expect(find.text('Inside joke: the wrong hill.'), findsOneWidget);
+    });
+
+    testWidgets('the contributor can caption, rename and delete their memory', (
+      WidgetTester tester,
+    ) async {
+      final store = await pumpTripApp(
+        tester,
+        memories: [
+          TimelineMemory(
+            id: 'mem-mine',
+            author: '@you',
+            contributor: 'You',
+            time: '10:00 AM',
+            text: 'First note of the trip.',
+            caption: 'rough caption',
+            createdAt: DateTime(2026, 6, 12, 10),
+            day: 1,
+            dayDate: 'JUN 12',
+          ),
+        ],
+      );
+      expect(find.text('rough caption'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('edit-mem-mine')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('edit-caption')),
+        'the real caption',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('edit-contributor')),
+        'Maya',
+      );
+      await tester.tap(find.text('SAVE'));
+      await tester.pumpAndSettle();
+
+      final edited = store.memoriesFor(lisbonTrip.id).single;
+      expect(edited.displayCaption, 'the real caption');
+      expect(edited.displayContributor, 'Maya');
+      expect(edited.text, 'First note of the trip.');
+      expect(find.text('the real caption'), findsOneWidget);
+      expect(find.text('Maya'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('delete-mem-mine')));
+      await tester.pumpAndSettle();
+
+      expect(store.memoriesFor(lisbonTrip.id), isEmpty);
+      expect(find.text('No memories yet.'), findsOneWidget);
+    });
+
+    testWidgets('oversized media picks are rejected with a brutalist message', (
+      WidgetTester tester,
+    ) async {
+      final store = await pumpTripApp(
+        tester,
+        pickers: fakePickers(
+          gallery: Uint8List(kMaxPhotoUploadBytes + 1),
+          video: Uint8List(kMaxVideoUploadBytes + 1),
+        ),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('add-memory-fab')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('memory-type-gallery')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('memory-upload-error')), findsOneWidget);
+      expect(find.textContaining('keep photos under 12.0 MB'), findsOneWidget);
+
+      // The oversized pick never attaches, so nothing is stored from it.
+      await tester.tap(find.text('Paste it in the scrapbook'));
+      await tester.pumpAndSettle();
+      expect(find.text('Add a memory'), findsOneWidget);
+      expect(store.memoriesFor(lisbonTrip.id), isEmpty);
+
+      await tester.enterText(
+        find.byKey(const ValueKey('memory-note')),
+        'note without media',
+      );
+      await tester.pump();
+      await tester.tap(find.text('Paste it in the scrapbook'));
+      await tester.pumpAndSettle();
+      expect(store.memoriesFor(lisbonTrip.id).single.type, MemoryType.text);
+
+      // Clips have their own, larger limit.
+      await tester.tap(find.byKey(const ValueKey('add-memory-fab')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('memory-type-video')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('keep clips under 64.0 MB'), findsOneWidget);
+      expect(find.text('Add a memory'), findsOneWidget);
+    });
+
+    testWidgets('memories added in-app survive a full restart', (
+      WidgetTester tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      SharedPreferences.setMockInitialValues({});
+
+      final store1 = TripStore.persistent();
+      await store1.init();
+      await store1.addTrip(lisbonTrip);
+
+      await tester.pumpWidget(
+        RoadSongApp(tripStore: store1, mediaPickers: fakePickers()),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Resume trip'));
+      await tester.pumpAndSettle();
+
+      await compose(tester, type: 'text', note: 'Survives the restart.');
+      expect(find.text('Survives the restart.'), findsOneWidget);
+
+      // Simulate a full restart reading the same preferences.
+      final store2 = TripStore.persistent();
+      await store2.init();
+      expect(
+        store2.memoriesFor(lisbonTrip.id).single.text,
+        'Survives the restart.',
+      );
+
+      await tester.pumpWidget(
+        RoadSongApp(
+          key: const ValueKey('restart-mem'),
+          tripStore: store2,
+          mediaPickers: fakePickers(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Resume trip'));
+      await tester.tap(find.text('Resume trip'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Survives the restart.'), findsOneWidget);
+    });
   });
 
   group('Typewriter Screen Tests', () {
