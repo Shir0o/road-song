@@ -94,6 +94,12 @@ class _SongTabState extends State<SongTab> {
 
   _SongStage _stage = _SongStage.start;
   LyricSong? _song;
+
+  /// Whether the current draft has been persisted through the store seam
+  /// (issue #31): flips true after a save so the lyrics stage can show a
+  /// visible "saved" status — edits and rewrites survive restarts and the
+  /// user can see that they did.
+  bool _draftSaved = false;
   // Choose Sound picker / result.
   MusicalStyle? _style;
   int _bpm = 0;
@@ -109,6 +115,7 @@ class _SongTabState extends State<SongTab> {
     final LyricSong? saved = widget.store?.songFor(widget.tripId ?? '');
     if (saved != null) {
       _song = saved;
+      _draftSaved = true;
       _stage = _SongStage.lyrics;
     }
     // A finished-memorial artifact resumes the unlocked song: the vibe is
@@ -247,6 +254,7 @@ class _SongTabState extends State<SongTab> {
     final String? tripId = widget.tripId;
     if (store == null || tripId == null) return;
     await store.saveSong(tripId, song);
+    if (mounted) setState(() => _draftSaved = true);
   }
 
   void _pickStyle(MusicalStyle style) {
@@ -676,7 +684,9 @@ class _SongTabState extends State<SongTab> {
                   ],
                 ),
                 Text(
-                  'draft 1 · $_memoryCountLine',
+                  _draftSaved
+                      ? 'draft 1 · $_memoryCountLine · saved ✓'
+                      : 'draft 1 · $_memoryCountLine',
                   style: GoogleFonts.caveat(
                     fontSize: 18,
                     color: BrutalTheme.graphite,

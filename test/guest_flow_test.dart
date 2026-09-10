@@ -12,6 +12,7 @@ import 'package:road_song/screens/guest_portal_screen.dart';
 import 'package:road_song/services/audio_seam.dart';
 import 'package:road_song/services/remote_trip_store.dart';
 import 'package:road_song/services/trip_link_sharer.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fake_backend.dart';
 
@@ -63,6 +64,9 @@ class FakeAudioSeam implements AudioSeam {
 void main() {
   setUpAll(() {
     GoogleFonts.config.allowRuntimeFetching = false;
+    // The guest portal persists pending uploads through SharedPreferences
+    // (issue #31); the mock keeps the queue in-memory in CI.
+    SharedPreferences.setMockInitialValues({});
   });
 
   /// 1x1 transparent PNG — a decodable photo fixture.

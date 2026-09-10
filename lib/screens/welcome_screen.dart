@@ -7,12 +7,18 @@ import '../widgets/brutal_widgets.dart';
 /// and a primary call-to-action to start creating a trip song.
 class WelcomeScreen extends StatelessWidget {
   final VoidCallback onStart;
+
+  /// Loads the pre-populated sample trip (issue #31): a complete memorial —
+  /// multiple contributors, mixed media, pinned places along a route and a
+  /// finished song — so the full arc is demoable immediately.
+  final VoidCallback? onLoadSample;
   final VoidCallback? onResume;
   final bool hasActiveTrip;
 
   const WelcomeScreen({
     Key? key,
     required this.onStart,
+    this.onLoadSample,
     this.onResume,
     this.hasActiveTrip = false,
   }) : super(key: key);
@@ -107,6 +113,23 @@ class WelcomeScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              if (onLoadSample != null) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: BrutalButton(
+                    key: const ValueKey('load-sample-trip'),
+                    onPressed: onLoadSample,
+                    color: BrutalTheme.yellow,
+                    child: Text(
+                      'Load the sample trip',
+                      style: BrutalTheme.ctaLabelStyle(
+                        color: BrutalTheme.inkBlack,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
               if (hasActiveTrip && onResume != null) ...[
                 const SizedBox(height: 12),
                 SizedBox(

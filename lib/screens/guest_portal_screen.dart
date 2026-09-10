@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../models/trip_models.dart';
 import '../services/audio_seam.dart';
+import '../services/pending_upload_store.dart';
 import '../services/remote_trip_store.dart';
 import '../theme.dart';
 import '../widgets/brutal_widgets.dart';
@@ -151,6 +152,11 @@ class _GuestPortalScreenState extends State<GuestPortalScreen> {
   String? _uploadError;
   String? _successMessage;
 
+  /// The upload that failed and was queued (issue #31): it survives app
+  /// restarts through [PendingUploadStore] and is re-shown with a retry so
+  /// a dropped connection never silently loses the guest's input.
+  PendingUpload? _pendingUpload;
+
   /// The visitor's current mode: upload (add memories) or consume (listen +
   /// browse the memorial). A trip with a published song opens in consume
   /// mode; the visitor can switch to upload to contribute.
@@ -160,11 +166,29 @@ class _GuestPortalScreenState extends State<GuestPortalScreen> {
   void initState() {
     super.initState();
     _loadTrip();
+    _loadPendingUpload();
     // Rebuild when the user types so the submit button enables/disables.
     _nameController.addListener(_onInputChanged);
     _noteController.addListener(_onInputChanged);
     _captionController.addListener(_onInputChanged);
     _placeController.addListener(_onInputChanged);
+  }
+
+  /// Restores a queued upload for this trip after a restart (issue #31): the
+  /// failed upload is re-shown with its retry affordance instead of being
+  /// silently lost. Best-effort: a storage failure never blocks the portal.
+  Future<void> _loadPendingUpload() async {
+    try {
+      final List<PendingUpload> pending = await PendingUploadStore().loadFor(
+        widget.tripCode,
+      );
+      if (!mounted || pending.isEmpty) return;
+      setState(() {
+        _pendingUpload = pending.first;
+      });
+    } catch (_) {
+      // No persisted queue (e.g. storage unavailable): nothing to restore.
+    }
   }
 
   void _onInputChanged() {
@@ -281,8 +305,15 @@ class _GuestPortalScreenState extends State<GuestPortalScreen> {
     if (!mounted) return;
 
     if (result.isSuccess) {
+      // A queued upload for this trip was delivered: clear the queue.
+      // Best-effort: a storage failure never blocks the upload flow.
+      try {
+        await PendingUploadStore().remove(widget.tripCode);
+      } catch (_) {}
+      if (!mounted) return;
       setState(() {
         _uploading = false;
+        _pendingUpload = null;
         _successMessage = _type == MemoryType.text
             ? 'Added to the trip. Thank you!'
             : 'Uploaded to the trip. Thank you!';
@@ -294,6 +325,78 @@ class _GuestPortalScreenState extends State<GuestPortalScreen> {
         _type = MemoryType.text;
       });
     } else {
+      // The upload failed: queue it (persisted, so it survives a restart)
+      // and show the retry affordance. The guest's input is never lost.
+      final PendingUpload pending = PendingUpload(
+        tripCode: widget.tripCode,
+        contributor: contributor.isEmpty ? 'Guest' : contributor,
+        author: author,
+        type: _type,
+        bytes: _mediaBytes ?? Uint8List(0),
+        contentType: _mediaContentType ?? 'text/plain',
+        caption: caption,
+        text: note,
+        locationName: place.isEmpty ? null : place,
+        createdAt: widget.now(),
+      );
+      // Best-effort: a storage failure never blocks the upload flow.
+      try {
+        await PendingUploadStore().save(pending);
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() {
+        _uploading = false;
+        _pendingUpload = pending;
+        _uploadError = result.error;
+      });
+    }
+  }
+
+  /// Retries the queued upload (issue #31): the persisted payload is
+  /// re-sent; on success the queue entry is cleared and the memory lands.
+  Future<void> _retryPending() async {
+    final PendingUpload? pending = _pendingUpload;
+    if (pending == null || _uploading) return;
+    setState(() {
+      _uploading = true;
+      _progress = 0;
+      _uploadError = null;
+      _successMessage = null;
+    });
+    final TripUploadResult result = await uploadGuestMemoryTo(
+      widget.client,
+      tripCode: pending.tripCode,
+      contributor: pending.contributor,
+      author: pending.author,
+      type: pending.type,
+      bytes: pending.bytes,
+      contentType: pending.contentType,
+      caption: pending.caption,
+      text: pending.text,
+      locationName: pending.locationName,
+      latitude: pending.latitude,
+      longitude: pending.longitude,
+      now: widget.now,
+      onProgress: (double p) {
+        if (mounted) setState(() => _progress = p);
+      },
+    );
+    if (!mounted) return;
+    if (result.isSuccess) {
+      // Best-effort: a storage failure never blocks the upload flow.
+      try {
+        await PendingUploadStore().remove(pending.tripCode);
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() {
+        _uploading = false;
+        _pendingUpload = null;
+        _successMessage = pending.type == MemoryType.text
+            ? 'Added to the trip. Thank you!'
+            : 'Uploaded to the trip. Thank you!';
+      });
+    } else {
+      if (!mounted) return;
       setState(() {
         _uploading = false;
         _uploadError = result.error;
@@ -469,6 +572,54 @@ class _GuestPortalScreenState extends State<GuestPortalScreen> {
                   fontWeight: FontWeight.bold,
                   color: const Color(0xFF3E4A2E),
                 ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (_pendingUpload != null) ...[
+            Container(
+              key: const ValueKey('guest-pending-upload'),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF6E3DC),
+                border: Border.all(color: BrutalTheme.primary, width: 1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'One upload is waiting to go through',
+                    style: GoogleFonts.karla(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: BrutalTheme.inkBlack,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'It was saved when your connection dropped — it will '
+                    'still reach the trip.',
+                    style: GoogleFonts.karla(
+                      fontSize: 12.5,
+                      height: 1.45,
+                      color: const Color(0xFF57493A),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  BrutalButton(
+                    key: const ValueKey('guest-retry-pending'),
+                    height: 40,
+                    onPressed: _retryPending,
+                    child: Text(
+                      'RETRY NOW',
+                      style: GoogleFonts.spaceMono(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: 16),
