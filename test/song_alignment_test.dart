@@ -18,6 +18,7 @@ const MusicalStyle kPopPunk = MusicalStyle(
   defaultBpm: 168,
   minBpm: 140,
   maxBpm: 190,
+  audioAsset: 'audio/vibes/pop_punk.mp3',
 );
 
 /// Three-section fixture: intro / chorus / outro.
@@ -495,6 +496,7 @@ void main() {
           defaultBpm: 168,
           minBpm: 140,
           maxBpm: 190,
+          audioAsset: 'audio/vibes/pop_punk.mp3',
         );
         final SynthResult audio = await const SimulatedSongSynth().synthesize(
           song: song,

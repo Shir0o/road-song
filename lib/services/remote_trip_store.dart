@@ -404,9 +404,13 @@ class RemoteTripStore extends ChangeNotifier implements TripStore {
     // Local-only memories (not yet on the backend) keep their place at the
     // end, in contribution order.
     merged.addAll(byId.values);
-    // The lyric draft is a local mirror artifact (the backend has no lyrics
-    // endpoint in v1); keep the local song across polls.
-    _trips[index] = remote.copyWith(memories: merged, song: local.song);
+    // The lyric draft and song artifact are local mirror artifacts (the
+    // backend has no lyrics/audio endpoints in v1); keep them across polls.
+    _trips[index] = remote.copyWith(
+      memories: merged,
+      song: local.song,
+      songArtifact: local.songArtifact,
+    );
     notifyListeners();
   }
 
@@ -504,6 +508,21 @@ class RemoteTripStore extends ChangeNotifier implements TripStore {
     final int index = _trips.indexWhere((t) => t.id == tripId);
     if (index == -1) return;
     _trips[index] = _trips[index].copyWith(song: song);
+    notifyListeners();
+  }
+
+  @override
+  SongArtifact? songArtifactFor(String tripId) {
+    final int index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return null;
+    return _trips[index].songArtifact;
+  }
+
+  @override
+  Future<void> saveSongArtifact(String tripId, SongArtifact artifact) async {
+    final int index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return;
+    _trips[index] = _trips[index].copyWith(songArtifact: artifact);
     notifyListeners();
   }
 

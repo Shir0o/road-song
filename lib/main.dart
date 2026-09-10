@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme.dart';
 import 'models/trip_models.dart';
+import 'services/audio_seam.dart';
 import 'services/remote_trip_store.dart';
 import 'services/session_ingestion_service.dart';
 import 'services/trip_link_sharer.dart';
@@ -22,6 +23,11 @@ class RoadSongApp extends StatelessWidget {
   final TripStore? tripStore;
   final MemoryMediaPickers mediaPickers;
 
+  /// The audio seam for vibe auditions and song playback. Tests inject a
+  /// fake so CI never touches a real codec; production defaults to
+  /// audioplayers-backed playback.
+  final AudioSeam? audioSeam;
+
   /// The trip-store client the guest portal uses. Tests inject the fake
   /// backend here; production defaults to the real HTTP client.
   final TripStoreClient? guestClient;
@@ -33,6 +39,7 @@ class RoadSongApp extends StatelessWidget {
     Key? key,
     this.tripStore,
     this.mediaPickers = const MemoryMediaPickers(),
+    this.audioSeam,
     this.guestClient,
     this.guestMediaPickers = const GuestMediaPickers(),
   }) : super(key: key);
@@ -58,6 +65,7 @@ class RoadSongApp extends StatelessWidget {
           builder: (_) => _AppHome(
             tripStore: tripStore,
             mediaPickers: mediaPickers,
+            audioSeam: audioSeam,
             guestClient: guestClient,
             guestMediaPickers: guestMediaPickers,
           ),
@@ -66,6 +74,7 @@ class RoadSongApp extends StatelessWidget {
       home: _AppHome(
         tripStore: tripStore,
         mediaPickers: mediaPickers,
+        audioSeam: audioSeam,
         guestClient: guestClient,
         guestMediaPickers: guestMediaPickers,
       ),
@@ -78,12 +87,14 @@ class RoadSongApp extends StatelessWidget {
 class _AppHome extends StatelessWidget {
   final TripStore? tripStore;
   final MemoryMediaPickers mediaPickers;
+  final AudioSeam? audioSeam;
   final TripStoreClient? guestClient;
   final GuestMediaPickers guestMediaPickers;
 
   const _AppHome({
     this.tripStore,
     required this.mediaPickers,
+    this.audioSeam,
     this.guestClient,
     required this.guestMediaPickers,
   });
@@ -108,7 +119,11 @@ class _AppHome extends StatelessWidget {
         mediaPickers: guestMediaPickers,
       );
     }
-    return OnboardingFlow(tripStore: tripStore, mediaPickers: mediaPickers);
+    return OnboardingFlow(
+      tripStore: tripStore,
+      mediaPickers: mediaPickers,
+      audioSeam: audioSeam,
+    );
   }
 }
 
@@ -116,11 +131,13 @@ class _AppHome extends StatelessWidget {
 class OnboardingFlow extends StatefulWidget {
   final TripStore? tripStore;
   final MemoryMediaPickers mediaPickers;
+  final AudioSeam? audioSeam;
 
   const OnboardingFlow({
     Key? key,
     this.tripStore,
     this.mediaPickers = const MemoryMediaPickers(),
+    this.audioSeam,
   }) : super(key: key);
 
   @override
@@ -196,6 +213,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
         return MainShell(
           tripStore: _tripStore,
           mediaPickers: widget.mediaPickers,
+          audioSeam: widget.audioSeam,
         );
       default:
         return WelcomeScreen(
@@ -211,11 +229,13 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
 class MainShell extends StatefulWidget {
   final TripStore? tripStore;
   final MemoryMediaPickers mediaPickers;
+  final AudioSeam? audioSeam;
 
   const MainShell({
     Key? key,
     this.tripStore,
     this.mediaPickers = const MemoryMediaPickers(),
+    this.audioSeam,
   }) : super(key: key);
 
   @override
@@ -608,6 +628,7 @@ class _MainShellState extends State<MainShell> {
             participants: _participantsFor(_selectedTripName),
             store: widget.tripStore,
             tripId: _selectedCreatedTrip?.id,
+            audioSeam: widget.audioSeam,
             onAddMemory: () => _navigateToTab(_diaryIndex),
           ),
         ],

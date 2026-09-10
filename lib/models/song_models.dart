@@ -131,6 +131,11 @@ class MusicalStyle {
   final int minBpm;
   final int maxBpm;
 
+  /// Bundled audition track for this vibe, played through the audio seam
+  /// (audioplayers AssetSource). One distinct, royalty-free-by-construction
+  /// MP3 per vibe — see assets/audio/vibes/PROVENANCE.md.
+  final String audioAsset;
+
   const MusicalStyle({
     required this.id,
     required this.label,
@@ -139,9 +144,11 @@ class MusicalStyle {
     required this.defaultBpm,
     required this.minBpm,
     required this.maxBpm,
+    required this.audioAsset,
   });
 
   /// The launch vibe catalog (issue #04: Pop-Punk, Euro-Trash Synth, …).
+  /// Each vibe carries its bundled audition asset (issue #29).
   static const List<MusicalStyle> catalog = <MusicalStyle>[
     MusicalStyle(
       id: 'pop-punk',
@@ -151,6 +158,7 @@ class MusicalStyle {
       defaultBpm: 168,
       minBpm: 140,
       maxBpm: 190,
+      audioAsset: 'audio/vibes/pop_punk.mp3',
     ),
     MusicalStyle(
       id: 'euro-trash-synth',
@@ -160,6 +168,7 @@ class MusicalStyle {
       defaultBpm: 128,
       minBpm: 110,
       maxBpm: 140,
+      audioAsset: 'audio/vibes/euro_trash_synth.mp3',
     ),
     MusicalStyle(
       id: 'sad-boy-indie',
@@ -169,6 +178,7 @@ class MusicalStyle {
       defaultBpm: 92,
       minBpm: 70,
       maxBpm: 110,
+      audioAsset: 'audio/vibes/sad_boy_indie.mp3',
     ),
     MusicalStyle(
       id: 'acoustic-road-folk',
@@ -178,6 +188,7 @@ class MusicalStyle {
       defaultBpm: 104,
       minBpm: 80,
       maxBpm: 128,
+      audioAsset: 'audio/vibes/acoustic_road_folk.mp3',
     ),
     MusicalStyle(
       id: 'chaotic-rap',
@@ -187,6 +198,7 @@ class MusicalStyle {
       defaultBpm: 144,
       minBpm: 120,
       maxBpm: 170,
+      audioAsset: 'audio/vibes/chaotic_rap.mp3',
     ),
   ];
 }
@@ -596,4 +608,93 @@ class SongTimeline {
       cues: cues,
     );
   }
+}
+
+/// ── Song artifact (Choose Sound → Making Song output) ──────────────────────
+
+/// The finished-memorial artifact persisted with the trip: the chosen vibe,
+/// the bundled audio asset that plays it, and the Making Song stage state.
+/// The lyrics live separately on [Trip.song]; remaking with a different vibe
+/// replaces this artifact and keeps the lyrics.
+class SongArtifact {
+  final String styleId;
+  final String audioAsset;
+  final int bpm;
+  final int stageIndex;
+
+  const SongArtifact({
+    required this.styleId,
+    required this.audioAsset,
+    required this.bpm,
+    this.stageIndex = 0,
+  });
+
+  /// The vibe this artifact was made with, or null when the catalog no
+  /// longer contains it (e.g. a stale persisted artifact).
+  MusicalStyle? get style {
+    for (final MusicalStyle s in MusicalStyle.catalog) {
+      if (s.id == styleId) return s;
+    }
+    return null;
+  }
+
+  /// True once the Making Song pass has completed and the song is playable.
+  bool get isUnlocked => stageIndex >= MakingSongStage.stages.length;
+
+  SongArtifact copyWith({int? stageIndex}) {
+    return SongArtifact(
+      styleId: styleId,
+      audioAsset: audioAsset,
+      bpm: bpm,
+      stageIndex: stageIndex ?? this.stageIndex,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'styleId': styleId,
+      'audioAsset': audioAsset,
+      'bpm': bpm,
+      'stageIndex': stageIndex,
+    };
+  }
+
+  factory SongArtifact.fromJson(Map<String, dynamic> json) {
+    return SongArtifact(
+      styleId: json['styleId'] as String,
+      audioAsset: json['audioAsset'] as String? ?? '',
+      bpm: json['bpm'] as int? ?? 0,
+      stageIndex: json['stageIndex'] as int? ?? 0,
+    );
+  }
+}
+
+/// One named step of the Making Song pass, in the order it runs.
+class MakingSongStage {
+  final String id;
+  final String label;
+
+  const MakingSongStage({required this.id, required this.label});
+
+  /// The v1 stage list (issue #18 sub-decision, documented in the #29 PR):
+  /// writing lyrics → arranging music → mixing → mastering. Each stage runs
+  /// for a credible, fixed duration so the pass feels like real production.
+  static const List<MakingSongStage> stages = <MakingSongStage>[
+    MakingSongStage(id: 'writing', label: 'Writing lyrics'),
+    MakingSongStage(id: 'arranging', label: 'Arranging music'),
+    MakingSongStage(id: 'mixing', label: 'Mixing'),
+    MakingSongStage(id: 'mastering', label: 'Mastering'),
+  ];
+
+  /// Per-stage duration of the simulated pass, in order.
+  static const List<Duration> stageDurations = <Duration>[
+    Duration(milliseconds: 1200),
+    Duration(milliseconds: 1200),
+    Duration(milliseconds: 1000),
+    Duration(milliseconds: 1000),
+  ];
+
+  /// Total duration of the full pass.
+  static Duration get totalDuration =>
+      stageDurations.fold(Duration.zero, (Duration a, Duration b) => a + b);
 }
