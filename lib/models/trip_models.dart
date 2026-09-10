@@ -142,6 +142,11 @@ class Trip {
   /// [song].
   final SongArtifact? songArtifact;
 
+  /// The finished memorial as served by the backend (audio ref + lyrics +
+  /// line-level timeline), populated when the trip is fetched from the
+  /// remote store. Local trips carry it only after a remote fetch.
+  final MemorialSong? memorialSong;
+
   const Trip({
     required this.id,
     required this.name,
@@ -154,6 +159,7 @@ class Trip {
     this.memories = const [],
     this.song,
     this.songArtifact,
+    this.memorialSong,
   });
 
   String get dateRange => '$firstDay – $lastDay';
@@ -181,6 +187,7 @@ class Trip {
     List<TimelineMemory>? memories,
     LyricSong? song,
     SongArtifact? songArtifact,
+    MemorialSong? memorialSong,
   }) {
     return Trip(
       id: id ?? this.id,
@@ -194,6 +201,7 @@ class Trip {
       memories: memories ?? this.memories,
       song: song ?? this.song,
       songArtifact: songArtifact ?? this.songArtifact,
+      memorialSong: memorialSong ?? this.memorialSong,
     );
   }
 
@@ -210,6 +218,7 @@ class Trip {
       'memories': memories.map((m) => m.toJson()).toList(),
       'song': song?.toJson(),
       'songArtifact': songArtifact?.toJson(),
+      'memorialSong': memorialSong?.toJson(),
     };
   }
 
@@ -242,6 +251,9 @@ class Trip {
       songArtifact: json['songArtifact'] == null
           ? null
           : SongArtifact.fromJson(json['songArtifact'] as Map<String, dynamic>),
+      memorialSong: json['memorialSong'] == null
+          ? null
+          : MemorialSong.fromJson(json['memorialSong'] as Map<String, dynamic>),
     );
   }
 }

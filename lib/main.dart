@@ -117,6 +117,7 @@ class _AppHome extends StatelessWidget {
         tripCode: code,
         client: guestClient ?? HttpTripStoreClient(),
         mediaPickers: guestMediaPickers,
+        audioSeam: audioSeam,
       );
     }
     return OnboardingFlow(
@@ -628,6 +629,7 @@ class _MainShellState extends State<MainShell> {
             participants: _participantsFor(_selectedTripName),
             store: widget.tripStore,
             tripId: _selectedCreatedTrip?.id,
+            tripCode: _selectedCreatedTrip?.code,
             audioSeam: widget.audioSeam,
             onAddMemory: () => _navigateToTab(_diaryIndex),
           ),

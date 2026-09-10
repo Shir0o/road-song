@@ -416,4 +416,85 @@ void main() {
       expect(recued.sections, same(timeline.sections));
     });
   });
+
+  group('Line-level timeline cues (spec decision 12)', () {
+    test('sectionAt and lineAt resolve the active line over the track', () {
+      final SongTimeline timeline = canonicalTimeline();
+      // Lead-in before the first section.
+      expect(timeline.sectionAt(-1), isNull);
+      expect(timeline.lineAt(-1), isNull);
+      // Inside the intro line.
+      expect(timeline.sectionAt(500)?.id, 'intro');
+      expect(timeline.lineAt(500)?.text, 'Press play');
+      // Between lines (intro line ends at 1000, chorus starts at 2000).
+      expect(timeline.lineAt(1500), isNull);
+      expect(timeline.sectionAt(1500)?.id, 'intro');
+      // Inside the chorus line.
+      expect(timeline.sectionAt(3000)?.kind, TimelineSectionKind.chorus);
+      expect(timeline.lineAt(3000)?.text, 'Sing it back');
+      // Past the end.
+      expect(timeline.sectionAt(5000), isNull);
+    });
+
+    test('lineCues enumerates every line with its section marker in order', () {
+      final SongTimeline timeline = canonicalTimeline();
+      final cues = timeline.lineCues;
+      expect(cues, hasLength(2));
+      expect(cues[0].section.id, 'intro');
+      expect(cues[0].line.text, 'Press play');
+      expect(cues[0].line.startMs, 0);
+      expect(cues[1].section.id, 'ch');
+      expect(cues[1].section.kind, TimelineSectionKind.chorus);
+      expect(cues[1].line.startMs, 2000);
+    });
+  });
+
+  group('MemorialSong wire model', () {
+    test('round-trips through JSON', () {
+      const MemorialSong song = MemorialSong(
+        title: 'Every Wrong Turn',
+        styleId: 'pop-punk',
+        bpm: 168,
+        audioAsset: 'audio/vibes/pop_punk.mp3',
+        durationMs: 8000,
+        lyrics: ['Press play on the tapes,', 'Sing it back on the long road,'],
+        sections: [
+          MemorialSection(
+            id: 'intro',
+            label: 'Intro',
+            kind: 'intro',
+            startMs: 0,
+            endMs: 4000,
+            lines: [MemorialLine(text: 'Press play on the tapes,', startMs: 0)],
+          ),
+        ],
+      );
+      final MemorialSong restored = MemorialSong.fromJson(song.toJson());
+      expect(restored.title, song.title);
+      expect(restored.styleId, song.styleId);
+      expect(restored.bpm, song.bpm);
+      expect(restored.audioAsset, song.audioAsset);
+      expect(restored.durationMs, song.durationMs);
+      expect(restored.lyrics, song.lyrics);
+      expect(restored.sections.single.lines.single.startMs, 0);
+    });
+
+    test('toMemorialSong flattens the timeline into line-level cues', () {
+      final SongTimeline timeline = canonicalTimeline();
+      final MemorialSong song = timeline.toMemorialSong(
+        audioAsset: 'audio/vibes/pop_punk.mp3',
+        lyrics: const ['Press play', 'Sing it back'],
+      );
+      expect(song.title, 'Every Wrong Turn');
+      expect(song.audioAsset, 'audio/vibes/pop_punk.mp3');
+      expect(song.durationMs, 4000);
+      expect(song.lyrics, ['Press play', 'Sing it back']);
+      expect(song.sections, hasLength(2));
+      expect(song.sections[0].kind, 'intro');
+      expect(song.sections[0].lines.single.text, 'Press play');
+      expect(song.sections[0].lines.single.startMs, 0);
+      expect(song.sections[1].kind, 'chorus');
+      expect(song.sections[1].lines.single.startMs, 2000);
+    });
+  });
 }

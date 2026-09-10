@@ -14,6 +14,8 @@
  *   POST   /api/trip/:code/memories        -> create a memory (text, or media after upload)
  *   GET    /api/trip/:code/media/:memoryId -> { url } presigned GET for one memory's media
  *   DELETE /api/trip/:code/memories/:id    -> remove a memory (creator/contributor)
+ *   PUT    /api/trip/:code/song            -> publish the finished memorial (audio ref + lyrics + line-level timeline)
+ *   GET    /api/trip/:code/song            -> the published memorial, or 404 when not published
  *
  * Size guardrails (server-side, mirroring the app's 12 MB / 64 MB limits):
  * upload-url rejects contentLength above the per-type cap with 413, and the
@@ -78,6 +80,16 @@ function memoryToJson(memory, mediaUrl) {
     mediaUrl,
     createdAt: memory.created_at,
   };
+}
+
+/** Parses the stored memorial JSON, or null when the trip has no song. */
+function songFromRow(trip) {
+  if (!trip.song) return null;
+  try {
+    return JSON.parse(trip.song);
+  } catch (_) {
+    return null;
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -218,6 +230,7 @@ async function handleCreateTrip(env, body) {
       coverIndex,
       createdAt,
       memories: [],
+      song: null,
     },
     201,
   );
@@ -235,6 +248,7 @@ async function handleGetTrip(env, code) {
     lastDay: trip.last_day,
     coverIndex: trip.cover_index,
     createdAt: trip.created_at,
+    song: songFromRow(trip),
     memories: memories.map((m) =>
       memoryToJson(
         m,
@@ -422,6 +436,55 @@ async function handleDeleteMemory(env, code, memoryId) {
   return json({ ok: true });
 }
 
+async function handlePutSong(env, code, body) {
+  const trip = await tripByCode(env, code);
+  if (!trip) return notFound('Trip not found');
+
+  const title = String(body.title || '').slice(0, 200);
+  const styleId = String(body.styleId || '').slice(0, 80);
+  const audioAsset = String(body.audioAsset || '').slice(0, 200);
+  if (title.length === 0 || styleId.length === 0 || audioAsset.length === 0) {
+    return badRequest('title, styleId and audioAsset are required');
+  }
+  const bpm = Number.isInteger(body.bpm) ? body.bpm : 0;
+  const durationMs = Number.isInteger(body.durationMs) ? body.durationMs : 0;
+  if (bpm <= 0 || durationMs <= 0) {
+    return badRequest('bpm and durationMs must be positive integers');
+  }
+  const lyrics = Array.isArray(body.lyrics)
+    ? body.lyrics.map((l) => String(l).slice(0, 500)).filter((l) => l.length > 0)
+    : [];
+  const sections = Array.isArray(body.sections)
+    ? body.sections.map((s) => ({
+        id: String(s.id || '').slice(0, 80),
+        label: String(s.label || '').slice(0, 120),
+        kind: String(s.kind || '').slice(0, 40),
+        startMs: Number.isInteger(s.startMs) ? s.startMs : 0,
+        endMs: Number.isInteger(s.endMs) ? s.endMs : 0,
+        lines: Array.isArray(s.lines)
+          ? s.lines.map((l) => ({
+              text: String(l.text || '').slice(0, 500),
+              startMs: Number.isInteger(l.startMs) ? l.startMs : 0,
+            }))
+          : [],
+      }))
+    : [];
+
+  const song = { title, styleId, bpm, audioAsset, durationMs, lyrics, sections };
+  await env.DB.prepare('UPDATE trips SET song = ? WHERE id = ?')
+    .bind(JSON.stringify(song), trip.id)
+    .run();
+  return json(song, 200);
+}
+
+async function handleGetSong(env, code) {
+  const trip = await tripByCode(env, code);
+  if (!trip) return notFound('Trip not found');
+  const song = songFromRow(trip);
+  if (!song) return notFound('This trip has no song yet');
+  return json(song);
+}
+
 async function readJson(request) {
   try {
     return await request.json();
@@ -454,6 +517,12 @@ export default {
       }
       if (rest === 'memories' && request.method === 'POST') {
         return handleCreateMemory(env, code, await readJson(request));
+      }
+      if (rest === 'song' && request.method === 'PUT') {
+        return handlePutSong(env, code, await readJson(request));
+      }
+      if (rest === 'song' && request.method === 'GET') {
+        return handleGetSong(env, code);
       }
       const mediaMatch = rest.match(/^media\/([^/]+)$/);
       if (mediaMatch && request.method === 'GET') {

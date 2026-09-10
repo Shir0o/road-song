@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS trips (
   first_day     TEXT NOT NULL DEFAULT '',
   last_day      TEXT NOT NULL DEFAULT '',
   cover_index   INTEGER NOT NULL DEFAULT 0,
+  song          TEXT,                        -- finished-memorial JSON (audio ref + lyrics + line-level timeline)
   created_at    TEXT NOT NULL                -- ISO-8601 UTC
 );
 

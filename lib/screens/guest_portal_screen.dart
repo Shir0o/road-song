@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../models/trip_models.dart';
+import '../services/audio_seam.dart';
 import '../services/remote_trip_store.dart';
 import '../theme.dart';
 import '../widgets/brutal_widgets.dart';
+import 'guest_consume_screen.dart';
 
 /// Upload guardrails for the guest web path — mirrors the app's
 /// [kMaxPhotoUploadBytes] / [kMaxVideoUploadBytes] from add_memory_sheet.dart.
@@ -111,12 +113,18 @@ class GuestPortalScreen extends StatefulWidget {
   final GuestMediaPickers mediaPickers;
   final DateTime Function() now;
 
+  /// The audio seam for the visitor's memorial player. Tests inject a fake
+  /// so CI never touches a real codec; production defaults to
+  /// audioplayers-backed playback.
+  final AudioSeam? audioSeam;
+
   const GuestPortalScreen({
     Key? key,
     required this.tripCode,
     required this.client,
     this.mediaPickers = const GuestMediaPickers(),
     this.now = DateTime.now,
+    this.audioSeam,
   }) : super(key: key);
 
   @override
@@ -142,6 +150,11 @@ class _GuestPortalScreenState extends State<GuestPortalScreen> {
   double _progress = 0;
   String? _uploadError;
   String? _successMessage;
+
+  /// The visitor's current mode: upload (add memories) or consume (listen +
+  /// browse the memorial). A trip with a published song opens in consume
+  /// mode; the visitor can switch to upload to contribute.
+  bool _consumeMode = false;
 
   @override
   void initState() {
@@ -182,6 +195,10 @@ class _GuestPortalScreenState extends State<GuestPortalScreen> {
       setState(() {
         _trip = trip;
         _loading = false;
+        // A trip with a published song opens in consume mode: the visitor
+        // can listen and browse immediately, and switch to upload to add
+        // their own memories.
+        _consumeMode = trip.memorialSong != null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -298,8 +315,57 @@ class _GuestPortalScreenState extends State<GuestPortalScreen> {
               )
             : _loadError != null
             ? _buildLoadError()
+            : _consumeMode
+            ? _buildConsume()
             : _buildPortal(),
       ),
+    );
+  }
+
+  /// The visitor consume mode: listen to the finished song and browse the
+  /// diary through the link, with a switch back to the upload form.
+  Widget _buildConsume() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: Row(
+            children: [
+              const Spacer(),
+              GestureDetector(
+                key: const ValueKey('guest-upload-mode'),
+                onTap: () => setState(() => _consumeMode = false),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: BrutalTheme.paper2,
+                    border: Border.all(color: const Color(0xFFDCCDAC)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'ADD YOUR MEMORIES',
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                      color: BrutalTheme.inkBlack,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: GuestConsumeScreen(
+            trip: _trip!,
+            audioSeam: widget.audioSeam ?? AudioplayersAudioSeam(),
+          ),
+        ),
+      ],
     );
   }
 

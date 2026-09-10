@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:road_song/models/song_models.dart';
 import 'package:road_song/models/trip_models.dart';
 import 'package:road_song/services/remote_trip_store.dart';
 
@@ -18,6 +19,9 @@ import 'package:road_song/services/remote_trip_store.dart';
 class FakeBackend implements TripStoreClient {
   final List<Trip> trips = [];
   final Map<String, List<TimelineMemory>> _memories = {};
+
+  /// Published memorials by trip code (the fake's "song table").
+  final Map<String, MemorialSong> songs = {};
 
   /// Media keys that "exist" in the fake R2 (uploaded via PUT).
   final Set<String> mediaKeys = {};
@@ -88,7 +92,41 @@ class FakeBackend implements TripStoreClient {
     if (trip == null) {
       throw const TripStoreHttpException(404, 'Trip not found');
     }
-    return trip.copyWith(memories: memoriesFor(tripCode));
+    return trip.copyWith(
+      memories: memoriesFor(tripCode),
+      memorialSong: songs[tripCode],
+    );
+  }
+
+  @override
+  Future<MemorialSong> publishSong(String tripCode, MemorialSong song) async {
+    Trip? trip;
+    for (final Trip t in trips) {
+      if (t.code == tripCode) {
+        trip = t;
+        break;
+      }
+    }
+    if (trip == null) {
+      throw const TripStoreHttpException(404, 'Trip not found');
+    }
+    songs[tripCode] = song;
+    return song;
+  }
+
+  @override
+  Future<MemorialSong?> fetchSong(String tripCode) async {
+    Trip? trip;
+    for (final Trip t in trips) {
+      if (t.code == tripCode) {
+        trip = t;
+        break;
+      }
+    }
+    if (trip == null) {
+      throw const TripStoreHttpException(404, 'Trip not found');
+    }
+    return songs[tripCode];
   }
 
   @override

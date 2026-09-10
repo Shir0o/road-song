@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:road_song/models/song_models.dart';
 import 'package:road_song/models/trip_models.dart';
 import 'package:road_song/services/remote_trip_store.dart';
 
@@ -391,6 +392,91 @@ void main() {
       expect(tripCodeFromLink(''), isNull);
       expect(tripCodeFromLink('https://example.com/other'), isNull);
       expect(buildTripLink('lisbon-trip'), 'roadsong.app/t/lisbon-trip');
+    });
+
+    test('publishSong stores the memorial and fetchSong serves it', () async {
+      final Trip trip = await backend.createTrip(
+        const TripDraft(name: 'Memorial Trip'),
+      );
+      const MemorialSong song = MemorialSong(
+        title: 'Every Wrong Turn',
+        styleId: 'pop-punk',
+        bpm: 168,
+        audioAsset: 'audio/vibes/pop_punk.mp3',
+        durationMs: 8000,
+        lyrics: ['Press play on the tapes,', 'Sing it back on the long road,'],
+        sections: [
+          MemorialSection(
+            id: 'intro',
+            label: 'Intro',
+            kind: 'intro',
+            startMs: 0,
+            endMs: 2000,
+            lines: [MemorialLine(text: 'Press play on the tapes,', startMs: 0)],
+          ),
+        ],
+      );
+
+      final MemorialSong published = await backend.publishSong(trip.code, song);
+      expect(published.title, 'Every Wrong Turn');
+
+      final MemorialSong? served = await backend.fetchSong(trip.code);
+      expect(served, isNotNull);
+      expect(served!.styleId, 'pop-punk');
+      expect(served.audioAsset, 'audio/vibes/pop_punk.mp3');
+      expect(served.lyrics, hasLength(2));
+      expect(served.sections.single.lines.single.startMs, 0);
+
+      // The trip fetch carries the memorial for the visitor surface.
+      final Trip fetched = await backend.fetchTrip(trip.code);
+      expect(fetched.memorialSong?.title, 'Every Wrong Turn');
+    });
+
+    test('fetchSong is null before the memorial is published', () async {
+      final Trip trip = await backend.createTrip(
+        const TripDraft(name: 'No Song Trip'),
+      );
+      expect(await backend.fetchSong(trip.code), isNull);
+      expect((await backend.fetchTrip(trip.code)).memorialSong, isNull);
+    });
+
+    test('RemoteTripStore.publishMemorialSong mirrors the memorial locally '
+        'and the next poll keeps it', () async {
+      final Trip trip = await backend.createTrip(
+        const TripDraft(name: 'Remote Memorial Trip'),
+      );
+      final RemoteTripStore store = RemoteTripStore(
+        client: backend,
+        pollInterval: const Duration(milliseconds: 50),
+      );
+      await store.addTrip(trip);
+      await store.init();
+      addTearDown(store.dispose);
+
+      const MemorialSong song = MemorialSong(
+        title: 'Every Wrong Turn',
+        styleId: 'sad-boy-indie',
+        bpm: 92,
+        audioAsset: 'audio/vibes/sad_boy_indie.mp3',
+        durationMs: 8000,
+        lyrics: ['Press play on the tapes,'],
+        sections: [
+          MemorialSection(
+            id: 'intro',
+            label: 'Intro',
+            kind: 'intro',
+            startMs: 0,
+            endMs: 2000,
+            lines: [MemorialLine(text: 'Press play on the tapes,', startMs: 0)],
+          ),
+        ],
+      );
+      await store.publishMemorialSong(trip.id, song);
+      expect(store.activeTrip?.memorialSong?.title, 'Every Wrong Turn');
+
+      // A later poll re-fetches the remote trip; the memorial survives.
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(store.activeTrip?.memorialSong?.styleId, 'sad-boy-indie');
     });
   });
 }
