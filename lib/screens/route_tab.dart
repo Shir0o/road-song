@@ -33,12 +33,31 @@ class RouteStop {
   });
 }
 
-/// Distinct pinned places in order of first appearance. Unpinned memories
-/// never appear on the route.
+/// Chronological order for route stops: by creation time when known, otherwise
+/// by the display [TimelineMemory.time] string — the same ordering the diary
+/// feed uses, so the route reads the journey in story order.
+int _chronologicalCompare(TimelineMemory a, TimelineMemory b) {
+  final DateTime? aTime = a.createdAt;
+  final DateTime? bTime = b.createdAt;
+  if (aTime != null && bTime != null) {
+    final int byCreated = aTime.compareTo(bTime);
+    if (byCreated != 0) return byCreated;
+  } else if (aTime != null) {
+    return -1;
+  } else if (bTime != null) {
+    return 1;
+  }
+  return a.time.compareTo(b.time);
+}
+
+/// Distinct pinned places in chronological order of first appearance. Unpinned
+/// memories never appear on the route.
 List<RouteStop> buildRouteStops(List<TimelineMemory> memories) {
+  final List<TimelineMemory> chronological = List.of(memories)
+    ..sort(_chronologicalCompare);
   final seen = <String>{};
   final stops = <RouteStop>[];
-  for (final memory in memories) {
+  for (final memory in chronological) {
     if (!memory.isPinned) continue;
     if (!seen.add(memory.locationName!)) continue;
     stops.add(

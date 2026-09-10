@@ -360,13 +360,40 @@ void main() {
       locationName: 'Alfama, Lisbon',
     );
 
-    test('buildRouteStops keeps distinct pinned places in first-appearance order', () {
+    test('buildRouteStops keeps distinct pinned places in chronological order', () {
       final stops = buildRouteStops(const [pinnedA, loose, pinnedC, repeatA]);
       expect(stops, hasLength(2));
       expect(stops[0].placeName, 'Alfama, Lisbon');
       expect(stops[0].id, 'a'); // first memory to pin Alfama
       expect(stops[1].placeName, 'Sintra');
       expect(stops[1].id, 'c');
+    });
+
+    test('buildRouteStops orders stops by createdAt, not contribution order', () {
+      // Contribution order: laterPinned first, earlierPinned second — but
+      // earlierPinned carries an earlier createdAt, so it must lead the route.
+      final TimelineMemory laterPinned = TimelineMemory(
+        id: 'later',
+        time: '09:00',
+        author: '@you',
+        text: 'Pinned later in the trip but contributed first.',
+        day: 2,
+        createdAt: DateTime(2026, 6, 13, 9),
+        locationName: 'Later Stop',
+      );
+      final TimelineMemory earlierPinned = TimelineMemory(
+        id: 'earlier',
+        time: '11:00',
+        author: '@maya',
+        text: 'Pinned earlier in the trip but contributed second.',
+        day: 1,
+        createdAt: DateTime(2026, 6, 12, 9),
+        locationName: 'Earlier Stop',
+      );
+      final stops = buildRouteStops([laterPinned, earlierPinned]);
+      expect(stops, hasLength(2));
+      expect(stops[0].id, 'earlier');
+      expect(stops[1].id, 'later');
     });
 
     test('routeKilometers sums great-circle distance and skips uncoordinated stops', () {
