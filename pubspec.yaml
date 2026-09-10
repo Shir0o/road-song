@@ -38,7 +38,7 @@ dependencies:
   http: ^1.2.2
   shared_preferences: ^2.2.3
   audioplayers: ^6.0.0
-  qr: ^3.0.2
+  qr: ^4.0.0
   image_picker: ^1.2.3
   share_plus: ^13.3.0
 
