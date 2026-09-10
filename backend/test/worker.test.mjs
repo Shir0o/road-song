@@ -57,8 +57,13 @@ function fakeD1(rows) {
                   params;
                 tables.trips.push({
                   id, code, name, first_day: firstDay, last_day: lastDay,
-                  cover_index: coverIndex, created_at: createdAt,
+                  cover_index: coverIndex, created_at: createdAt, song: null,
                 });
+              }
+              if (sql.trimStart().startsWith('UPDATE trips SET song')) {
+                const [song, id] = params;
+                const trip = tables.trips.find((t) => t.id === id);
+                if (trip) trip.song = song;
               }
               if (sql.trimStart().startsWith('INSERT INTO memories')) {
                 const [id, tripId, type, contributor, author, caption, text,
@@ -101,7 +106,10 @@ function fakeR2(keys) {
 
 function makeEnv({ trips, memories, mediaKeys } = {}) {
   return {
-    DB: fakeD1({ trips, memories }),
+    DB: fakeD1({
+      trips: (trips || []).map((t) => ({ ...t })),
+      memories: (memories || []).map((m) => ({ ...m })),
+    }),
     R2: fakeR2(mediaKeys),
     R2_ACCOUNT_ID: 'acct',
     R2_ACCESS_KEY_ID: 'key',
@@ -114,12 +122,12 @@ function makeEnv({ trips, memories, mediaKeys } = {}) {
 const tripA = {
   id: 'trip-a', code: 'alpha', name: 'Alpha Trip',
   first_day: 'JUN 1', last_day: 'JUN 7', cover_index: 0,
-  created_at: '2026-06-01T00:00:00.000Z',
+  song: null, created_at: '2026-06-01T00:00:00.000Z',
 };
 const tripB = {
   id: 'trip-b', code: 'bravo', name: 'Bravo Trip',
   first_day: 'JUL 1', last_day: 'JUL 7', cover_index: 0,
-  created_at: '2026-07-01T00:00:00.000Z',
+  song: null, created_at: '2026-07-01T00:00:00.000Z',
 };
 const memoryA = {
   id: 'mem-a1', trip_id: 'trip-a', type: 'text', contributor: 'Maya',
@@ -257,4 +265,64 @@ test('non-API paths fall through to static assets (SPA)', async () => {
   );
   assert.equal(res.status, 200);
   assert.equal(await res.text(), 'spa');
+});
+
+test('PUT /api/trip/:code/song publishes the memorial and GET serves it', async () => {
+  const env = makeEnv({ trips: [tripA] });
+  const song = {
+    title: 'Every Wrong Turn',
+    styleId: 'pop-punk',
+    bpm: 168,
+    audioAsset: 'audio/vibes/pop_punk.mp3',
+    durationMs: 8000,
+    lyrics: ['Press play on the tapes,', 'Sing it back on the long road,'],
+    sections: [
+      {
+        id: 'intro',
+        label: 'Intro',
+        kind: 'intro',
+        startMs: 0,
+        endMs: 2000,
+        lines: [{ text: 'Press play on the tapes,', startMs: 0 }],
+      },
+    ],
+  };
+  const put = await api(env, 'PUT', '/api/trip/alpha/song', song);
+  assert.equal(put.status, 200);
+  assert.equal((await put.json()).title, 'Every Wrong Turn');
+
+  const get = await api(env, 'GET', '/api/trip/alpha/song');
+  assert.equal(get.status, 200);
+  const served = await get.json();
+  assert.equal(served.styleId, 'pop-punk');
+  assert.equal(served.audioAsset, 'audio/vibes/pop_punk.mp3');
+  assert.equal(served.sections[0].lines[0].startMs, 0);
+
+  // The trip fetch also carries the song.
+  const trip = await (await api(env, 'GET', '/api/trip/alpha')).json();
+  assert.equal(trip.song.title, 'Every Wrong Turn');
+});
+
+test('GET /api/trip/:code/song is 404 before the memorial is published', async () => {
+  const env = makeEnv({ trips: [tripA] });
+  const res = await api(env, 'GET', '/api/trip/alpha/song');
+  assert.equal(res.status, 404);
+});
+
+test('PUT song is scoped to the trip code and validates the payload', async () => {
+  const env = makeEnv({ trips: [tripA, tripB] });
+  // Publishing under bravo never touches alpha.
+  await api(env, 'PUT', '/api/trip/bravo/song', {
+    title: 'Bravo Song', styleId: 'pop-punk', audioAsset: 'audio/vibes/pop_punk.mp3',
+    bpm: 168, durationMs: 8000, lyrics: [], sections: [],
+  });
+  const alpha = await (await api(env, 'GET', '/api/trip/alpha')).json();
+  assert.equal(alpha.song, null);
+
+  // Missing required fields are rejected.
+  const bad = await api(env, 'PUT', '/api/trip/alpha/song', {
+    title: '', styleId: 'pop-punk', audioAsset: 'audio/vibes/pop_punk.mp3',
+    bpm: 168, durationMs: 8000, lyrics: [], sections: [],
+  });
+  assert.equal(bad.status, 400);
 });

@@ -341,6 +341,35 @@ class SongTimeline {
       for (final TimelineLine l in s.lines) l.words.length,
   ].fold(0, (int a, int b) => a + b);
 
+  /// The section active at [ms], or null in the instrumental lead-in/tail.
+  TimelineSection? sectionAt(int ms) {
+    for (final TimelineSection section in sections) {
+      if (ms >= section.startMs && ms <= section.endMs) return section;
+    }
+    return null;
+  }
+
+  /// The lyric line active at [ms], or null between lines/sections.
+  TimelineLine? lineAt(int ms) {
+    final TimelineSection? section = sectionAt(ms);
+    if (section == null) return null;
+    for (final TimelineLine line in section.lines) {
+      if (ms >= line.startMs && ms <= line.endMs) return line;
+    }
+    return null;
+  }
+
+  /// Every lyric line across the track in time order, paired with its
+  /// section — the line-level sync cues (line start times over the track
+  /// plus section markers) that drive the kinetic subtitles (spec decision
+  /// 12: line-level timeline for v1).
+  List<({TimelineSection section, TimelineLine line})> get lineCues =>
+      <({TimelineSection section, TimelineLine line})>[
+        for (final TimelineSection section in sections)
+          for (final TimelineLine line in section.lines)
+            (section: section, line: line),
+      ];
+
   /// A copy of this timeline with [cues] swapped in.
   SongTimeline withCues(List<EvidenceCue> cues) {
     return SongTimeline(
@@ -352,6 +381,37 @@ class SongTimeline {
       downbeat: downbeat,
       sections: sections,
       cues: cues,
+    );
+  }
+
+  /// The finished-memorial wire payload for this timeline: the audio
+  /// reference, the lyrics and the line-level sync cues (line start times
+  /// over the track plus section markers) served to visitors.
+  MemorialSong toMemorialSong({
+    required String audioAsset,
+    required List<String> lyrics,
+  }) {
+    return MemorialSong(
+      title: title,
+      styleId: styleId,
+      bpm: bpm,
+      audioAsset: audioAsset,
+      durationMs: durationMs,
+      lyrics: lyrics,
+      sections: <MemorialSection>[
+        for (final TimelineSection section in sections)
+          MemorialSection(
+            id: section.id,
+            label: section.label,
+            kind: section.kind.name,
+            startMs: section.startMs,
+            endMs: section.endMs,
+            lines: <MemorialLine>[
+              for (final TimelineLine line in section.lines)
+                MemorialLine(text: line.text, startMs: line.startMs),
+            ],
+          ),
+      ],
     );
   }
 
@@ -697,4 +757,130 @@ class MakingSongStage {
   /// Total duration of the full pass.
   static Duration get totalDuration =>
       stageDurations.fold(Duration.zero, (Duration a, Duration b) => a + b);
+}
+
+/// The finished-memorial payload the backend serves to visitors: the audio
+/// reference (the vibe's bundled asset), the lyrics, and the line-level
+/// timeline (line start times over the track plus section markers) that
+/// drives the kinetic subtitles. The wire shape mirrors the app's
+/// [SongArtifact] + [LyricSong] + [SongTimeline] so the guest consume mode
+/// can render the same player.
+class MemorialSong {
+  final String title;
+  final String styleId;
+  final int bpm;
+  final String audioAsset;
+  final int durationMs;
+  final List<String> lyrics;
+  final List<MemorialSection> sections;
+
+  const MemorialSong({
+    required this.title,
+    required this.styleId,
+    required this.bpm,
+    required this.audioAsset,
+    required this.durationMs,
+    required this.lyrics,
+    required this.sections,
+  });
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'title': title,
+      'styleId': styleId,
+      'bpm': bpm,
+      'audioAsset': audioAsset,
+      'durationMs': durationMs,
+      'lyrics': lyrics,
+      'sections': <Map<String, dynamic>>[
+        for (final MemorialSection section in sections) section.toJson(),
+      ],
+    };
+  }
+
+  factory MemorialSong.fromJson(Map<String, dynamic> json) {
+    return MemorialSong(
+      title: json['title'] as String? ?? '',
+      styleId: json['styleId'] as String? ?? '',
+      bpm: json['bpm'] as int? ?? 0,
+      audioAsset: json['audioAsset'] as String? ?? '',
+      durationMs: json['durationMs'] as int? ?? 0,
+      lyrics: <String>[
+        for (final dynamic line in json['lyrics'] as List<dynamic>? ?? const [])
+          line as String,
+      ],
+      sections: <MemorialSection>[
+        for (final Map<String, dynamic> section
+            in json['sections'] as List<dynamic>? ?? const [])
+          MemorialSection.fromJson(section),
+      ],
+    );
+  }
+}
+
+/// One section marker of the line-level timeline: the section's label and
+/// kind plus the start time of each lyric line within it.
+class MemorialSection {
+  final String id;
+  final String label;
+  final String kind;
+  final int startMs;
+  final int endMs;
+  final List<MemorialLine> lines;
+
+  const MemorialSection({
+    required this.id,
+    required this.label,
+    required this.kind,
+    required this.startMs,
+    required this.endMs,
+    required this.lines,
+  });
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'label': label,
+      'kind': kind,
+      'startMs': startMs,
+      'endMs': endMs,
+      'lines': <Map<String, dynamic>>[
+        for (final MemorialLine line in lines) line.toJson(),
+      ],
+    };
+  }
+
+  factory MemorialSection.fromJson(Map<String, dynamic> json) {
+    return MemorialSection(
+      id: json['id'] as String? ?? '',
+      label: json['label'] as String? ?? '',
+      kind: json['kind'] as String? ?? '',
+      startMs: json['startMs'] as int? ?? 0,
+      endMs: json['endMs'] as int? ?? 0,
+      lines: <MemorialLine>[
+        for (final Map<String, dynamic> line
+            in json['lines'] as List<dynamic>? ?? const [])
+          MemorialLine.fromJson(line),
+      ],
+    );
+  }
+}
+
+/// One lyric line cue: the line text and its start time over the track.
+class MemorialLine {
+  final String text;
+  final int startMs;
+
+  const MemorialLine({required this.text, required this.startMs});
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{'text': text, 'startMs': startMs};
+  }
+
+  factory MemorialLine.fromJson(Map<String, dynamic> json) {
+    return MemorialLine(
+      text: json['text'] as String? ?? '',
+      startMs: json['startMs'] as int? ?? 0,
+    );
+  }
 }

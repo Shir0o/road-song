@@ -1,6 +1,7 @@
 import 'package:audioplayers/audioplayers.dart';
 
-/// The audio seam for the Choose Sound / Making Song stages (issue #29).
+/// The audio seam for the Choose Sound / Making Song stages (issue #29) and
+/// the kinetic memorial player (issue #30).
 ///
 /// Screens and engines talk to this seam only — never to audioplayers
 /// directly — so app-seam tests can inject a fake and CI never touches a
@@ -17,8 +18,23 @@ abstract class AudioSeam {
   /// from a user gesture — iOS Safari otherwise blocks the audible start.
   Future<void> start();
 
+  /// Pauses playback, keeping the position.
+  Future<void> pause();
+
+  /// Seeks to [position] in the current source.
+  Future<void> seek(Duration position);
+
   /// Stops playback and releases the player.
   Future<void> stop();
+
+  /// Emits the current playback position while playing.
+  Stream<Duration> get positionStream;
+
+  /// Emits the loaded source's duration once known.
+  Stream<Duration> get durationStream;
+
+  /// Emits when the current source finishes playing.
+  Stream<void> get onComplete;
 }
 
 /// Production seam backed by `audioplayers`. One player instance is reused
@@ -38,9 +54,28 @@ class AudioplayersAudioSeam implements AudioSeam {
   }
 
   @override
+  Future<void> pause() async {
+    await _player.pause();
+  }
+
+  @override
+  Future<void> seek(Duration position) async {
+    await _player.seek(position);
+  }
+
+  @override
   Future<void> stop() async {
     await _player.stop();
   }
+
+  @override
+  Stream<Duration> get positionStream => _player.onPositionChanged;
+
+  @override
+  Stream<Duration> get durationStream => _player.onDurationChanged;
+
+  @override
+  Stream<void> get onComplete => _player.onPlayerComplete;
 
   /// Releases the underlying player. Call when the owning screen is
   /// disposed so no audio keeps playing after the stage is left.

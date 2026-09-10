@@ -373,39 +373,39 @@ void main() {
     expect(find.text('Pop-up moments'), findsOneWidget);
     expect(find.textContaining('Marina Pier'), findsOneWidget);
 
-    // Share Memorial Card CTA launches the keepsake and export view
-    expect(find.byKey(const ValueKey('share-memorial-card')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('share-memorial-card')));
+    // Share Memorial CTA launches the ready screen with the share action
+    expect(find.byKey(const ValueKey('share-memorial-link')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('share-memorial-link')));
     await tester.pump();
 
-    expect(find.text('SHARE MEMORIAL'), findsOneWidget);
-    expect(find.text('KEEPSAKE'), findsOneWidget);
-    expect(find.text('1080p MP4 Video Export'), findsOneWidget);
+    expect(find.text('Your trip memorial is ready'), findsOneWidget);
+    expect(find.text('READY'), findsOneWidget);
+    expect(find.byKey(const ValueKey('share-memorial-link')), findsOneWidget);
 
     // Back returns to the ready screen
-    await tester.tap(find.byKey(const ValueKey('memorial-back-button')));
+    await tester.tap(find.byKey(const ValueKey('memorial-ready-back')));
     await tester.pump();
 
     expect(find.text('Your song is ready!'), findsOneWidget);
 
-    // Watch Highlight Reel CTA launches the player
-    expect(find.byKey(const ValueKey('play-highlight-reel')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('play-highlight-reel')));
+    // Play the memorial CTA launches the kinetic player
+    expect(find.byKey(const ValueKey('play-song')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('play-song')));
     await tester.pump();
 
     expect(find.text('60 FPS'), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('reel-play-pause-button')),
+      find.byKey(const ValueKey('kinetic-play-pause-button')),
       findsOneWidget,
     );
 
-    // Share from player launches memorial screen
-    await tester.tap(find.byKey(const ValueKey('reel-share-button')));
+    // Share from player launches the ready screen
+    await tester.tap(find.byKey(const ValueKey('kinetic-share-button')));
     await tester.pump();
 
-    expect(find.text('SHARE MEMORIAL'), findsOneWidget);
+    expect(find.text('Your trip memorial is ready'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('memorial-back-button')));
+    await tester.tap(find.byKey(const ValueKey('memorial-ready-back')));
     await tester.pump();
 
     expect(find.text('Your song is ready!'), findsOneWidget);

@@ -102,6 +102,14 @@ abstract class TripStoreClient {
 
   /// Deletes a memory (and its media) from the backend.
   Future<void> deleteMemory(String tripCode, String memoryId);
+
+  /// Publishes the finished memorial (audio ref + lyrics + line-level
+  /// timeline) so visitors can listen and browse through the trip link.
+  Future<MemorialSong> publishSong(String tripCode, MemorialSong song);
+
+  /// Fetches the published memorial for [tripCode], or null when the trip
+  /// has no song yet.
+  Future<MemorialSong?> fetchSong(String tripCode);
 }
 
 /// [TripStoreClient] over plain HTTP (the `http` package). The base URL is
@@ -243,6 +251,27 @@ class HttpTripStoreClient implements TripStoreClient {
       _uri('/trip/$tripCode/memories/$memoryId'),
     );
     _ensureOk(response);
+  }
+
+  @override
+  Future<MemorialSong> publishSong(String tripCode, MemorialSong song) async {
+    final http.Response response = await _client.put(
+      _uri('/trip/$tripCode/song'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode(song.toJson()),
+    );
+    _ensureOk(response);
+    return MemorialSong.fromJson(_decode(response));
+  }
+
+  @override
+  Future<MemorialSong?> fetchSong(String tripCode) async {
+    final http.Response response = await _client.get(
+      _uri('/trip/$tripCode/song'),
+    );
+    if (response.statusCode == 404) return null;
+    _ensureOk(response);
+    return MemorialSong.fromJson(_decode(response));
   }
 }
 
@@ -406,6 +435,8 @@ class RemoteTripStore extends ChangeNotifier implements TripStore {
     merged.addAll(byId.values);
     // The lyric draft and song artifact are local mirror artifacts (the
     // backend has no lyrics/audio endpoints in v1); keep them across polls.
+    // The memorial song (published to the backend) is a remote artifact and
+    // follows the remote copy.
     _trips[index] = remote.copyWith(
       memories: merged,
       song: local.song,
@@ -523,6 +554,17 @@ class RemoteTripStore extends ChangeNotifier implements TripStore {
     final int index = _trips.indexWhere((t) => t.id == tripId);
     if (index == -1) return;
     _trips[index] = _trips[index].copyWith(songArtifact: artifact);
+    notifyListeners();
+  }
+
+  /// Publishes the finished memorial to the backend and mirrors it locally,
+  /// so visitors can listen and browse through the trip link.
+  Future<void> publishMemorialSong(String tripId, MemorialSong song) async {
+    final int index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return;
+    final Trip trip = _trips[index];
+    await client.publishSong(trip.code, song);
+    _trips[index] = trip.copyWith(memorialSong: song);
     notifyListeners();
   }
 

@@ -10,11 +10,12 @@ import '../engines/timeline_aligner.dart';
 import '../models/song_models.dart';
 import '../models/trip_models.dart';
 import '../services/audio_seam.dart';
+import '../services/remote_trip_store.dart';
 import '../services/trip_store.dart';
 import '../theme.dart';
 import '../widgets/brutal_widgets.dart';
-import '../widgets/highlight_reel_player.dart';
-import 'share_memorial_screen.dart';
+import '../widgets/kinetic_player.dart';
+import 'memorial_ready_screen.dart';
 
 /// The Song tab: the songwriting stages of the zip flow — Song Start
 /// ("Write our song"), the Reading progress pass, the modular lyrics view
@@ -33,6 +34,10 @@ class SongTab extends StatefulWidget {
   final TripStore? store;
   final String? tripId;
 
+  /// The trip code from the session link (`roadsong.app/t/<code>`), used to
+  /// build the shareable memorial link. Null for demo trips.
+  final String? tripCode;
+
   /// The audio seam for vibe auditions and song playback. Tests inject a
   /// fake so CI never touches a real codec; production defaults to
   /// audioplayers-backed playback.
@@ -49,6 +54,7 @@ class SongTab extends StatefulWidget {
     required this.participants,
     this.store,
     this.tripId,
+    this.tripCode,
     this.audioSeam,
     this.onAddMemory,
   }) : super(key: key);
@@ -65,7 +71,6 @@ enum _SongStage {
   sound,
   making,
   ready,
-  play,
   player,
   memorial,
 }
@@ -123,12 +128,15 @@ class _SongTabState extends State<SongTab> {
   }
 
   /// Rebuilds the alignment timeline after a restart so the ready screen and
-  /// the highlight reel work without re-running the Making Song pass.
+  /// the kinetic player work without re-running the Making Song pass. The
+  /// memorial is re-published to the backend so visitors keep access after
+  /// the app restarts.
   Future<void> _resumeTimeline() async {
     if (_song == null || _style == null) return;
     final SongTimeline timeline = await _alignTimeline(_song!, _style!, _bpm);
     if (!mounted) return;
     setState(() => _timeline = timeline);
+    await _publishMemorial(timeline);
   }
 
   @override
@@ -290,10 +298,27 @@ class _SongTabState extends State<SongTab> {
           _timeline = timeline;
           _stage = _SongStage.ready;
         });
+        await _publishMemorial(timeline);
       } else {
         _advanceMakingStage();
       }
     });
+  }
+
+  /// Publishes the finished memorial to the backend when the trip is
+  /// remote-backed, so visitors can listen and browse through the trip link.
+  /// Local trips (in-memory / preferences) keep the memorial in-app only.
+  Future<void> _publishMemorial(SongTimeline timeline) async {
+    final TripStore? store = widget.store;
+    final String? tripId = widget.tripId;
+    if (store is! RemoteTripStore || tripId == null || _song == null) return;
+    final List<String> lyrics = <String>[
+      for (final LyricSection section in _song!.sections) ...section.lines,
+    ];
+    await store.publishMemorialSong(
+      tripId,
+      timeline.toMemorialSong(audioAsset: _style!.audioAsset, lyrics: lyrics),
+    );
   }
 
   /// Persists the song artifact (vibe, audio asset, stage state) through the
@@ -430,19 +455,20 @@ class _SongTabState extends State<SongTab> {
             _SongStage.sound => _buildSound(),
             _SongStage.making => _buildMaking(),
             _SongStage.ready => _buildReady(),
-            _SongStage.play => _buildPlay(),
-            _SongStage.player => HighlightReelPlayer(
+            _SongStage.player => KineticPlayer(
               timeline: _timeline!,
               memories: widget.memories,
+              audioSeam: _audio,
+              autoPlay: true,
               onClose: () => setState(() => _stage = _SongStage.ready),
               onShare: () => setState(() => _stage = _SongStage.memorial),
             ),
-            _SongStage.memorial => ShareMemorialScreen(
+            _SongStage.memorial => MemorialReadyScreen(
               tripName: widget.tripName,
+              tripCode: widget.tripCode,
               timeline: _timeline!,
-              memories: widget.memories,
-              participants: widget.participants,
               onBack: () => setState(() => _stage = _SongStage.ready),
+              onWatch: () => setState(() => _stage = _SongStage.player),
             ),
           },
         ),
@@ -1368,7 +1394,7 @@ class _SongTabState extends State<SongTab> {
                   // gesture-proximate on web (iOS Safari otherwise blocks it).
                   _audio.prime(_style!.audioAsset);
                   _audio.start();
-                  setState(() => _stage = _SongStage.play);
+                  setState(() => _stage = _SongStage.player);
                 },
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -1379,28 +1405,8 @@ class _SongTabState extends State<SongTab> {
                       size: 24,
                     ),
                     const SizedBox(width: 8),
-                    Text('Play the song', style: BrutalTheme.ctaLabelStyle()),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            SizedBox(
-              width: double.infinity,
-              child: BrutalButton(
-                key: const ValueKey('play-highlight-reel'),
-                onPressed: () => setState(() => _stage = _SongStage.player),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.play_arrow_rounded,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                    const SizedBox(width: 8),
                     Text(
-                      'Watch highlight reel',
+                      'Play the memorial',
                       style: BrutalTheme.ctaLabelStyle(),
                     ),
                   ],
@@ -1411,20 +1417,16 @@ class _SongTabState extends State<SongTab> {
             SizedBox(
               width: double.infinity,
               child: BrutalButton(
-                key: const ValueKey('share-memorial-card'),
+                key: const ValueKey('share-memorial-link'),
                 color: BrutalTheme.primary,
                 onPressed: () => setState(() => _stage = _SongStage.memorial),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(
-                      Icons.card_giftcard,
-                      color: Colors.white,
-                      size: 20,
-                    ),
+                    const Icon(Icons.ios_share, color: Colors.white, size: 20),
                     const SizedBox(width: 8),
                     Text(
-                      'Share memorial card',
+                      'Your memorial is ready — share it',
                       style: BrutalTheme.ctaLabelStyle(),
                     ),
                   ],
@@ -1471,82 +1473,6 @@ class _SongTabState extends State<SongTab> {
               fontSize: 12,
               fontWeight: FontWeight.bold,
               color: BrutalTheme.inkBlack,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Song playing ──────────────────────────────────────────────────────────
-
-  /// The unlocked song playing through the audio seam. The audible start
-  /// derived from the tap that entered this stage (web autoplay policy);
-  /// the controls here let the listener stop and restart it.
-  Widget _buildPlay() {
-    final MusicalStyle style = _style!;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 30),
-      child: Column(
-        children: [
-          Expanded(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Transform.rotate(
-                    angle: -6 * 3.14159 / 180,
-                    child: Text(
-                      '♪',
-                      style: GoogleFonts.karla(
-                        fontSize: 44,
-                        color: BrutalTheme.primary,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    _song?.title ?? 'Your song',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.instrumentSerif(
-                      fontSize: 30,
-                      color: BrutalTheme.inkBlack,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    '${style.label} · $_bpm BPM',
-                    style: GoogleFonts.caveat(
-                      fontSize: 19,
-                      color: BrutalTheme.graphite,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    'playing through the audio seam',
-                    style: GoogleFonts.spaceMono(
-                      fontSize: 10,
-                      letterSpacing: 1.2,
-                      color: const Color(0xFFB3A488),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          SizedBox(
-            width: double.infinity,
-            child: BrutalButton(
-              key: const ValueKey('stop-song'),
-              color: const Color(0xFF5A4938),
-              onPressed: () {
-                _audio.stop();
-                setState(() => _stage = _SongStage.ready);
-              },
-              child: Text(
-                'Stop and go back',
-                style: BrutalTheme.ctaLabelStyle(),
-              ),
             ),
           ),
         ],

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -5,12 +6,57 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:road_song/main.dart';
+import 'package:road_song/models/song_models.dart';
 import 'package:road_song/models/trip_models.dart';
 import 'package:road_song/screens/guest_portal_screen.dart';
+import 'package:road_song/services/audio_seam.dart';
 import 'package:road_song/services/remote_trip_store.dart';
 import 'package:road_song/services/trip_link_sharer.dart';
 
 import 'fake_backend.dart';
+
+/// A fake audio seam for the visitor's memorial player (mocked in CI).
+class FakeAudioSeam implements AudioSeam {
+  final List<String> primed = [];
+  final List<String> started = [];
+  int stopCount = 0;
+  int pauseCount = 0;
+  final StreamController<Duration> positions = StreamController.broadcast();
+  final StreamController<Duration> durations = StreamController.broadcast();
+  final StreamController<void> completes = StreamController.broadcast();
+
+  @override
+  Future<void> prime(String asset) async {
+    primed.add(asset);
+  }
+
+  @override
+  Future<void> start() async {
+    started.add(primed.isEmpty ? '' : primed.last);
+  }
+
+  @override
+  Future<void> pause() async {
+    pauseCount++;
+  }
+
+  @override
+  Future<void> seek(Duration position) async {}
+
+  @override
+  Future<void> stop() async {
+    stopCount++;
+  }
+
+  @override
+  Stream<Duration> get positionStream => positions.stream;
+
+  @override
+  Stream<Duration> get durationStream => durations.stream;
+
+  @override
+  Stream<void> get onComplete => completes.stream;
+}
 
 /// Whole-app guest flow tests at the app seam: the real [RoadSongApp] with
 /// the fake backend injected as the trip-store client. No real network in CI.
@@ -462,5 +508,134 @@ void main() {
       // for pending timers before tearDowns run).
       store.dispose();
     });
+  });
+
+  group('Visitor consume mode (listen + browse through the link)', () {
+    const MemorialSong kMemorial = MemorialSong(
+      title: 'Every Wrong Turn',
+      styleId: 'pop-punk',
+      bpm: 168,
+      audioAsset: 'audio/vibes/pop_punk.mp3',
+      durationMs: 8000,
+      lyrics: ['Press play on the tapes,', 'Sing it back on the long road,'],
+      sections: [
+        MemorialSection(
+          id: 'intro',
+          label: 'Intro',
+          kind: 'intro',
+          startMs: 0,
+          endMs: 4000,
+          lines: [MemorialLine(text: 'Press play on the tapes,', startMs: 0)],
+        ),
+        MemorialSection(
+          id: 'ch',
+          label: 'Chorus',
+          kind: 'chorus',
+          startMs: 4000,
+          endMs: 8000,
+          lines: [
+            MemorialLine(text: 'Sing it back on the long road,', startMs: 4000),
+          ],
+        ),
+      ],
+    );
+
+    testWidgets(
+      'a visitor opens the link, listens to the song and browses the diary',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final FakeBackend fake = FakeBackend();
+        final Trip trip = await fake.createTrip(
+          const TripDraft(name: 'Lisbon Trip'),
+        );
+        await fake.publishSong(trip.code, kMemorial);
+        await fake.createMemory(
+          trip.code,
+          TimelineMemory(
+            id: 'mem-1',
+            author: '@maya',
+            contributor: 'Maya',
+            time: '10:00 AM',
+            text: 'The wrong hill, Sintra. Never again.',
+            type: MemoryType.text,
+            createdAt: DateTime(2026, 6, 12, 10),
+          ),
+        );
+        final audio = FakeAudioSeam();
+
+        tester.binding.platformDispatcher.defaultRouteNameTestValue =
+            '/t/${trip.code}';
+        addTearDown(
+          () =>
+              tester.binding.platformDispatcher.defaultRouteNameTestValue = '/',
+        );
+
+        await tester.pumpWidget(
+          RoadSongApp(guestClient: fake, audioSeam: audio),
+        );
+        await tester.pumpAndSettle();
+
+        // The trip has a published song, so the portal opens in consume
+        // mode: listen + browse, no app or account.
+        expect(find.text('THE MEMORIAL'), findsOneWidget);
+        expect(find.text('LISTEN TO THE SONG'), findsOneWidget);
+        expect(find.text('Every Wrong Turn'), findsOneWidget);
+        expect(find.text('BROWSE THE DIARY'), findsOneWidget);
+        expect(
+          find.text('The wrong hill, Sintra. Never again.'),
+          findsOneWidget,
+        );
+        expect(find.text('Maya'), findsOneWidget);
+
+        // Listening primes and starts the vibe's audio through the seam.
+        await tester.tap(find.byKey(const ValueKey('guest-listen-button')));
+        await tester.pump();
+        expect(audio.primed, contains('audio/vibes/pop_punk.mp3'));
+        expect(audio.started, contains('audio/vibes/pop_punk.mp3'));
+        expect(
+          find.byKey(const ValueKey('kinetic-play-pause-button')),
+          findsOneWidget,
+        );
+
+        // The visitor can switch back to the upload form to contribute.
+        await tester.tap(find.byKey(const ValueKey('guest-upload-mode')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('guest-name')), findsOneWidget);
+        expect(find.byKey(const ValueKey('guest-submit')), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a trip without a published song opens the upload portal as before',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final FakeBackend fake = FakeBackend();
+        final Trip trip = await fake.createTrip(
+          const TripDraft(name: 'Fresh Trip'),
+        );
+        tester.binding.platformDispatcher.defaultRouteNameTestValue =
+            '/t/${trip.code}';
+        addTearDown(
+          () =>
+              tester.binding.platformDispatcher.defaultRouteNameTestValue = '/',
+        );
+
+        await tester.pumpWidget(RoadSongApp(guestClient: fake));
+        await tester.pumpAndSettle();
+
+        // No song yet: the upload form is the surface.
+        expect(find.text('THE MEMORIAL'), findsNothing);
+        expect(find.byKey(const ValueKey('guest-name')), findsOneWidget);
+        expect(find.textContaining('You were on this trip'), findsOneWidget);
+      },
+    );
   });
 }

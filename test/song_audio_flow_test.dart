@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,7 +7,10 @@ import 'package:road_song/main.dart';
 import 'package:road_song/models/song_models.dart';
 import 'package:road_song/models/trip_models.dart';
 import 'package:road_song/services/audio_seam.dart';
-import 'package:road_song/services/trip_store.dart';
+import 'package:road_song/services/remote_trip_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'fake_backend.dart';
 
 /// Seam A flow tests for the Choose Sound / Making Song / audio journey
 /// (issue #29): pump the real app with an injected in-memory TripStore and a
@@ -15,7 +20,15 @@ import 'package:road_song/services/trip_store.dart';
 class FakeAudioSeam implements AudioSeam {
   final List<String> primed = [];
   final List<String> started = [];
+  final List<Duration> seeks = [];
   int stopCount = 0;
+  int pauseCount = 0;
+
+  /// Emitted position while "playing" — tests drive the player clock with
+  /// these to simulate real playback.
+  final StreamController<Duration> positions = StreamController.broadcast();
+  final StreamController<Duration> durations = StreamController.broadcast();
+  final StreamController<void> completes = StreamController.broadcast();
 
   @override
   Future<void> prime(String asset) async {
@@ -28,9 +41,28 @@ class FakeAudioSeam implements AudioSeam {
   }
 
   @override
+  Future<void> pause() async {
+    pauseCount++;
+  }
+
+  @override
+  Future<void> seek(Duration position) async {
+    seeks.add(position);
+  }
+
+  @override
   Future<void> stop() async {
     stopCount++;
   }
+
+  @override
+  Stream<Duration> get positionStream => positions.stream;
+
+  @override
+  Stream<Duration> get durationStream => durations.stream;
+
+  @override
+  Stream<void> get onComplete => completes.stream;
 }
 
 const TimelineMemory kChurroMemory = TimelineMemory(
@@ -185,17 +217,21 @@ void main() {
       expect(artifact.bpm, 168);
       expect(artifact.isUnlocked, isTrue);
 
-      // Play the song: the audible start derives from this tap.
+      // Play the song: the audible start derives from this tap and the
+      // kinetic player opens.
       await tester.tap(find.byKey(const ValueKey('play-song')));
       await tester.pump();
-      expect(find.text('Pop-Punk · 168 BPM'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('kinetic-play-pause-button')),
+        findsOneWidget,
+      );
+      expect(find.text('168 BPM · POP-PUNK'), findsOneWidget);
       expect(audio.started.last, 'audio/vibes/pop_punk.mp3');
 
-      // Stop returns to the ready stage.
-      await tester.tap(find.byKey(const ValueKey('stop-song')));
+      // Close returns to the ready stage.
+      await tester.tap(find.byKey(const ValueKey('kinetic-close-button')));
       await tester.pump();
       expect(find.text('Your song is ready!'), findsOneWidget);
-      expect(audio.stopCount, 1);
 
       // Remake with a different vibe: re-run the pass, swap the audio, and
       // keep the lyrics.
@@ -255,6 +291,205 @@ void main() {
     expect(find.text('mastered at 168 BPM · Pop-Punk'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('play-song')));
     await tester.pump();
-    expect(find.text('Pop-Punk · 168 BPM'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('kinetic-play-pause-button')),
+      findsOneWidget,
+    );
   });
+
+  testWidgets(
+    'kinetic player: play/pause, seek and replay drive the audio seam and '
+    'the line-level cues',
+    (tester) async {
+      final store = InMemoryTripStore(
+        trips: [tripFixture(memories: kCaboMemories)],
+        activeTripId: 'trip-audio',
+      );
+      final audio = FakeAudioSeam();
+
+      await pumpApp(tester, store, audio);
+      await resumeToHub(tester);
+      await openSongTab(tester);
+      await writeSong(tester);
+      await tester.ensureVisible(find.byKey(const ValueKey('choose-sound')));
+      await tester.tap(find.byKey(const ValueKey('choose-sound')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('style-card-pop-punk')));
+      await tester.pump();
+      await makeSong(tester);
+      expect(find.text('Your song is ready!'), findsOneWidget);
+
+      // Open the kinetic player: the audible start derives from this tap.
+      await tester.tap(find.byKey(const ValueKey('play-song')));
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('kinetic-play-pause-button')),
+        findsOneWidget,
+      );
+      expect(audio.started.last, 'audio/vibes/pop_punk.mp3');
+
+      // The line-level cue strip shows the active section marker and line.
+      expect(find.byKey(const ValueKey('line-cue-strip')), findsOneWidget);
+
+      // Pause: the audio seam pauses and the ticker stops.
+      await tester.tap(find.byKey(const ValueKey('kinetic-play-pause-button')));
+      await tester.pump();
+      expect(audio.pauseCount, 1);
+      expect(find.text('❚❚ PAUSED'), findsOneWidget);
+
+      // Resume: the audio seam starts again (vibe audition + play + resume).
+      await tester.tap(find.byKey(const ValueKey('kinetic-play-pause-button')));
+      await tester.pump();
+      expect(audio.started.length, 3);
+      expect(audio.started.last, 'audio/vibes/pop_punk.mp3');
+      expect(find.text('● TAPE PLAYING'), findsOneWidget);
+
+      // Seek: dragging the scrubber seeks the audio seam.
+      final Finder slider = find.byKey(
+        const ValueKey('kinetic-scrubber-slider'),
+      );
+      await tester.tap(slider);
+      await tester.pump();
+      expect(audio.seeks, isNotEmpty);
+
+      // Replay: seeks back to zero and keeps playing.
+      await tester.tap(find.byKey(const ValueKey('kinetic-replay-button')));
+      await tester.pump();
+      expect(audio.seeks.last, Duration.zero);
+      expect(find.textContaining('0:00 /'), findsOneWidget);
+
+      // Close returns to the ready stage.
+      await tester.tap(find.byKey(const ValueKey('kinetic-close-button')));
+      await tester.pump();
+      expect(find.text('Your song is ready!'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'ready state surfaces the share action; the shared link is the trip link',
+    (tester) async {
+      final store = InMemoryTripStore(
+        trips: [tripFixture(memories: kCaboMemories)],
+        activeTripId: 'trip-audio',
+      );
+      final audio = FakeAudioSeam();
+
+      await pumpApp(tester, store, audio);
+      await resumeToHub(tester);
+      await openSongTab(tester);
+      await writeSong(tester);
+      await tester.ensureVisible(find.byKey(const ValueKey('choose-sound')));
+      await tester.tap(find.byKey(const ValueKey('choose-sound')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('style-card-pop-punk')));
+      await tester.pump();
+      await makeSong(tester);
+
+      // The ready state surfaces the share action.
+      expect(find.text('Your song is ready!'), findsOneWidget);
+      expect(find.byKey(const ValueKey('share-memorial-link')), findsOneWidget);
+
+      // The ready screen shows the trip link (roadsong.app/t/<code>).
+      await tester.tap(find.byKey(const ValueKey('share-memorial-link')));
+      await tester.pump();
+      expect(find.text('Your trip memorial is ready'), findsOneWidget);
+      expect(find.text('roadsong.app/t/cabo-trip'), findsOneWidget);
+      expect(find.byKey(const ValueKey('share-memorial-link')), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'a remote-backed trip publishes the memorial so the link serves it',
+    (tester) async {
+      final FakeBackend backend = FakeBackend();
+      final Trip trip = await backend.createTrip(
+        const TripDraft(name: 'Cabo Trip'),
+      );
+      final RemoteTripStore store = RemoteTripStore(
+        client: backend,
+        pollInterval: const Duration(seconds: 10),
+      );
+      await store.addTrip(trip.copyWith(memories: kCaboMemories));
+      await store.init();
+      final audio = FakeAudioSeam();
+
+      await pumpApp(tester, store, audio);
+      await resumeToHub(tester);
+      await openSongTab(tester);
+      await writeSong(tester);
+      await tester.ensureVisible(find.byKey(const ValueKey('choose-sound')));
+      await tester.tap(find.byKey(const ValueKey('choose-sound')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('style-card-pop-punk')));
+      await tester.pump();
+      await makeSong(tester);
+      expect(find.text('Your song is ready!'), findsOneWidget);
+
+      // The finished memorial was published to the backend: a visitor
+      // opening the trip link can fetch it (audio ref + lyrics + timeline).
+      final MemorialSong? served = await backend.fetchSong(trip.code);
+      expect(served, isNotNull);
+      expect(served!.title, 'Every Wrong Turn');
+      expect(served.audioAsset, 'audio/vibes/pop_punk.mp3');
+      expect(served.lyrics, isNotEmpty);
+      expect(served.sections, isNotEmpty);
+      expect(
+        served.sections.first.lines.first.startMs,
+        greaterThanOrEqualTo(0),
+      );
+
+      // Stop the poll timer before the test body ends.
+      store.dispose();
+    },
+  );
+
+  testWidgets(
+    'restart preserves the finished-memorial state through the store seam',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store1 = TripStore.persistent();
+      await store1.init();
+      await store1.addTrip(tripFixture(memories: kCaboMemories));
+      final audio = FakeAudioSeam();
+
+      await pumpApp(tester, store1, audio);
+      await resumeToHub(tester);
+      await openSongTab(tester);
+      await writeSong(tester);
+      await tester.ensureVisible(find.byKey(const ValueKey('choose-sound')));
+      await tester.tap(find.byKey(const ValueKey('choose-sound')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('style-card-pop-punk')));
+      await tester.pump();
+      await makeSong(tester);
+      expect(find.text('Your song is ready!'), findsOneWidget);
+
+      // Restart: a fresh persistent store reads the same preferences.
+      final store2 = TripStore.persistent();
+      await store2.init();
+      expect(store2.songArtifactFor('trip-audio')?.isUnlocked, isTrue);
+
+      await pumpApp(
+        tester,
+        store2,
+        audio,
+        key: const ValueKey('restart-finished'),
+      );
+      await resumeToHub(tester);
+      await openSongTab(tester);
+
+      // The finished memorial resumes: ready state, playable player, and
+      // the share action all return without re-running the pass.
+      expect(find.text('Your song is ready!'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('play-song')));
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('kinetic-play-pause-button')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('kinetic-close-button')));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('share-memorial-link')), findsOneWidget);
+    },
+  );
 }

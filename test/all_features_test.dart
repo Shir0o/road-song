@@ -334,36 +334,33 @@ void main() {
 
         // 10. Song Ready stage with Play and Share
         expect(find.text('Your song is ready!'), findsOneWidget);
+        expect(find.byKey(const ValueKey('play-song')), findsOneWidget);
         expect(
-          find.byKey(const ValueKey('play-highlight-reel')),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(const ValueKey('share-memorial-card')),
+          find.byKey(const ValueKey('share-memorial-link')),
           findsOneWidget,
         );
 
-        // 11. Play Highlight Reel stage
-        await tester.tap(find.byKey(const ValueKey('play-highlight-reel')));
+        // 11. Play the kinetic memorial player
+        await tester.tap(find.byKey(const ValueKey('play-song')));
         await tester.pumpAndSettle();
         expect(
-          find.byKey(const ValueKey('reel-play-pause-button')),
+          find.byKey(const ValueKey('kinetic-play-pause-button')),
           findsOneWidget,
         );
 
         // Back from player to ready
-        await tester.tap(find.byKey(const ValueKey('reel-close-button')));
+        await tester.tap(find.byKey(const ValueKey('kinetic-close-button')));
         await tester.pumpAndSettle();
         expect(find.text('Your song is ready!'), findsOneWidget);
 
         // 12. Share Memorial stage
-        await tester.tap(find.byKey(const ValueKey('share-memorial-card')));
+        await tester.tap(find.byKey(const ValueKey('share-memorial-link')));
         await tester.pumpAndSettle();
-        expect(find.text('SHARE MEMORIAL'), findsOneWidget);
-        expect(find.text('KEEPSAKE'), findsOneWidget);
+        expect(find.text('Your trip memorial is ready'), findsOneWidget);
+        expect(find.text('READY'), findsOneWidget);
 
         // Back to ready
-        await tester.tap(find.byKey(const ValueKey('memorial-back-button')));
+        await tester.tap(find.byKey(const ValueKey('memorial-ready-back')));
         await tester.pumpAndSettle();
         expect(find.text('Your song is ready!'), findsOneWidget);
       },
