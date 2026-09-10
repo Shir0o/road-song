@@ -28,6 +28,7 @@ void main() {
     _MockHttpClient.mockResponseBody = '';
     _MockHttpClient.mockResponseBytes = null;
     _MockHttpClient.mockNetworkError = false;
+    _MockHttpClient.requestCount = 0;
   });
 
   group('Brutal Widgets Tests', () {
@@ -1208,6 +1209,171 @@ void main() {
     });
   });
 
+  group('Route View Flow Tests', () {
+    final Trip routeTrip = Trip(
+      id: 'trip-route',
+      name: 'Route Trip',
+      firstDay: 'JUN 12',
+      lastDay: 'JUN 18',
+      coverIndex: 1,
+      crew: const [],
+      sessionLink: 'roadsong.app/t/route-trip',
+      createdAt: DateTime(2026, 6, 12),
+    );
+
+    TimelineMemory routeMemory(
+      String id, {
+      required int day,
+      required DateTime createdAt,
+      required String text,
+      required String place,
+      double? latitude,
+      double? longitude,
+    }) {
+      return TimelineMemory(
+        id: id,
+        author: '@you',
+        contributor: 'You',
+        time: '10:00 AM',
+        text: text,
+        createdAt: createdAt,
+        day: day,
+        dayDate: 'JUN ${day + 11}',
+        locationName: place,
+        latitude: latitude,
+        longitude: longitude,
+      );
+    }
+
+    Future<InMemoryTripStore> pumpRouteApp(
+      WidgetTester tester, {
+      required List<TimelineMemory> memories,
+    }) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final store = InMemoryTripStore(
+        trips: [routeTrip.copyWith(memories: memories)],
+        activeTripId: routeTrip.id,
+      );
+      await tester.pumpWidget(
+        RoadSongApp(tripStore: store, mediaPickers: MemoryMediaPickers()),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Resume trip'));
+      await tester.pumpAndSettle();
+      return store;
+    }
+
+    testWidgets('route renders pinned stops in chronological order from the '
+        'store, unpinned memories never appear', (tester) async {
+      // Contribution order is deliberately scrambled: the day-2 stop was
+      // contributed first, the day-1 stop second, and an unpinned memory sits
+      // between them. The route must follow chronological (createdAt) order.
+      await pumpRouteApp(
+        tester,
+        memories: [
+          routeMemory(
+            'm-late',
+            day: 2,
+            createdAt: DateTime(2026, 6, 13, 9),
+            text: 'The wrong hill, Sintra.',
+            place: 'Sintra, the wrong hill',
+            latitude: 38.794,
+            longitude: -9.388,
+          ),
+          TimelineMemory(
+            id: 'm-loose',
+            author: '@maya',
+            contributor: 'Maya',
+            time: '10:00 AM',
+            text: 'Not pinned anywhere.',
+            createdAt: DateTime(2026, 6, 12, 10),
+            day: 1,
+            dayDate: 'JUN 12',
+          ),
+          routeMemory(
+            'm-early',
+            day: 1,
+            createdAt: DateTime(2026, 6, 12, 8),
+            text: 'Tram 28, all of us.',
+            place: 'Alfama, Lisbon',
+            latitude: 38.712,
+            longitude: -9.131,
+          ),
+        ],
+      );
+
+      await tester.tap(find.byIcon(Icons.flag));
+      await tester.pumpAndSettle();
+
+      // Stop count and both pinned stops, in chronological order.
+      expect(find.text('The route'), findsOneWidget);
+      expect(find.text('2 stops · 24 km'), findsOneWidget);
+      expect(find.byKey(const ValueKey('route-pin-m-early')), findsOneWidget);
+      expect(find.byKey(const ValueKey('route-pin-m-late')), findsOneWidget);
+
+      // The unpinned memory never becomes a pin or a stop row.
+      expect(find.byKey(const ValueKey('route-pin-m-loose')), findsNothing);
+      expect(find.byKey(const ValueKey('stop-row-m-loose')), findsNothing);
+
+      // Chronological order on screen: the day-1 stop leads, the day-2 stop
+      // follows, even though the day-2 memory was contributed first.
+      final double earlyY = tester
+          .getTopLeft(find.byKey(const ValueKey('stop-row-m-early')))
+          .dy;
+      final double lateY = tester
+          .getTopLeft(find.byKey(const ValueKey('stop-row-m-late')))
+          .dy;
+      expect(earlyY, lessThan(lateY));
+      expect(find.text('Alfama, Lisbon'), findsOneWidget);
+      expect(find.text('Sintra, the wrong hill'), findsOneWidget);
+
+      // Diary/Route tab switching still works.
+      await tester.tap(find.byIcon(Icons.edit_note));
+      await tester.pumpAndSettle();
+      expect(find.text('Day 1'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.flag));
+      await tester.pumpAndSettle();
+      expect(find.text('The route'), findsOneWidget);
+    });
+
+    testWidgets('empty route shows the designed empty state and makes no '
+        'network calls', (tester) async {
+      await pumpRouteApp(
+        tester,
+        memories: [
+          TimelineMemory(
+            id: 'm-loose',
+            author: '@maya',
+            contributor: 'Maya',
+            time: '10:00 AM',
+            text: 'Not pinned anywhere.',
+            createdAt: DateTime(2026, 6, 12, 10),
+            day: 1,
+            dayDate: 'JUN 12',
+          ),
+        ],
+      );
+
+      await tester.tap(find.byIcon(Icons.flag));
+      await tester.pumpAndSettle();
+
+      // Empty state: brutalist hint that pinning a place adds a stop.
+      expect(find.text('0 stops'), findsOneWidget);
+      expect(
+        find.textContaining('No pinned places yet'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Pin a place to a memory'), findsOneWidget);
+
+      // The route surface is fully offline: no HTTP requests at all.
+      expect(_MockHttpClient.requestCount, 0);
+    });
+  });
+
   group('Typewriter Screen Tests', () {
     testWidgets('Interaction and simulation of generation', (
       WidgetTester tester,
@@ -1476,6 +1642,10 @@ class _MockHttpClient implements HttpClient {
   static List<int>? mockResponseBytes;
   static bool mockNetworkError = false;
 
+  /// Total HTTP requests issued since the last reset — lets tests assert that
+  /// a surface (e.g. the route view) makes no network calls at all.
+  static int requestCount = 0;
+
   @override
   dynamic noSuchMethod(Invocation invocation) {
     final Uri? url =
@@ -1484,6 +1654,7 @@ class _MockHttpClient implements HttpClient {
               orElse: () => null,
             )
             as Uri?;
+    requestCount++;
     if (mockNetworkError &&
         url != null &&
         (url.host == 'api.anthropic.com' || url.host == 'api.elevenlabs.io')) {
