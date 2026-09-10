@@ -218,6 +218,35 @@ void main() {
         expect(section.lines, isNotEmpty);
       }
     });
+
+    test(
+      'regenerating after new memories reflects the latest content',
+      () async {
+        // First draft: only the churro memory exists.
+        final LyricSong first = await lyricist.composeSong(
+          tripName: "Cabo Fail '23",
+          participants: kCrew,
+          memories: const [kChurroMemory],
+        );
+        expect(_allLines(first), contains('seagull for the last churro'));
+        expect(
+          _allLines(first),
+          isNot(contains('Karaoke meltdown')),
+          reason: 'the karaoke memory does not exist yet',
+        );
+
+        // A new memory lands; regenerating drafts from the latest content.
+        final LyricSong regenerated = await lyricist.composeSong(
+          tripName: "Cabo Fail '23",
+          participants: kCrew,
+          memories: kCaboMemories,
+        );
+        final String lines = _allLines(regenerated);
+        expect(lines, contains('seagull for the last churro'));
+        expect(lines, contains('Karaoke meltdown'));
+        expect(lines, contains('playing poker with candy'));
+      },
+    );
   });
 
   group('rewriteSection', () {

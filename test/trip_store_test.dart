@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:road_song/models/song_models.dart';
 import 'package:road_song/models/trip_models.dart';
 import 'package:flutter/material.dart';
 
@@ -43,7 +44,10 @@ void main() {
       expect(restored.crew.length, 1);
       expect(restored.crew.first.name, 'Jordan Lee');
       expect(restored.crew.first.invited, true);
-      expect(restored.crew.first.color.toARGB32(), const Color(0xFF3E6B8A).toARGB32());
+      expect(
+        restored.crew.first.color.toARGB32(),
+        const Color(0xFF3E6B8A).toARGB32(),
+      );
     });
   });
 
@@ -144,7 +148,10 @@ void main() {
       final store2 = PreferencesTripStore();
       await store2.init();
       expect(store2.activeTrip?.crew.length, 2);
-      expect(store2.activeTrip?.crew.any((c) => c.name == 'Alex Rivera'), isTrue);
+      expect(
+        store2.activeTrip?.crew.any((c) => c.name == 'Alex Rivera'),
+        isTrue,
+      );
     });
   });
 
@@ -352,6 +359,88 @@ void main() {
       final store3 = PreferencesTripStore();
       await store3.init();
       expect(store3.memoriesFor('trip-101'), isEmpty);
+    });
+  });
+
+  group('TripStore lyric draft seam', () {
+    const LyricSong kDraft = LyricSong(
+      title: 'Every Wrong Turn',
+      sections: <LyricSection>[
+        LyricSection(
+          id: 'ch',
+          label: 'Chorus',
+          variants: <List<String>>[
+            ['Sing it back on the long road,', 'every wrong turn worth it.'],
+          ],
+        ),
+      ],
+    );
+
+    test('songFor is null until a draft is saved', () async {
+      final store = InMemoryTripStore(trips: [sampleTrip]);
+      expect(store.songFor('trip-101'), isNull);
+      expect(store.songFor('missing-trip'), isNull);
+    });
+
+    test('saveSong replaces the previous draft', () async {
+      final store = InMemoryTripStore(trips: [sampleTrip]);
+      await store.saveSong('trip-101', kDraft);
+      expect(store.songFor('trip-101')!.title, 'Every Wrong Turn');
+      expect(store.songFor('trip-101')!.section('ch')!.lines, [
+        'Sing it back on the long road,',
+        'every wrong turn worth it.',
+      ]);
+
+      const LyricSong edited = LyricSong(
+        title: 'Every Wrong Turn',
+        sections: <LyricSection>[
+          LyricSection(
+            id: 'ch',
+            label: 'Chorus',
+            variants: <List<String>>[
+              ['Hand-edited chorus line'],
+            ],
+          ),
+        ],
+      );
+      await store.saveSong('trip-101', edited);
+      expect(store.songFor('trip-101')!.section('ch')!.lines, [
+        'Hand-edited chorus line',
+      ]);
+    });
+
+    test('saving to an unknown trip changes nothing', () async {
+      final store = InMemoryTripStore(trips: [sampleTrip]);
+      await store.saveSong('nope', kDraft);
+      expect(store.songFor('nope'), isNull);
+    });
+
+    test('a lyric draft survives a PreferencesTripStore restart', () async {
+      SharedPreferences.setMockInitialValues({});
+      final store1 = PreferencesTripStore();
+      await store1.init();
+      await store1.addTrip(sampleTrip);
+      await store1.saveSong('trip-101', kDraft);
+
+      final store2 = PreferencesTripStore();
+      await store2.init();
+      final LyricSong? restored = store2.songFor('trip-101');
+      expect(restored, isNotNull);
+      expect(restored!.title, 'Every Wrong Turn');
+      expect(restored.section('ch')!.lines, [
+        'Sing it back on the long road,',
+        'every wrong turn worth it.',
+      ]);
+    });
+
+    test('a lyric draft round-trips through Trip JSON', () async {
+      final json = sampleTrip.copyWith(song: kDraft).toJson();
+      final restored = Trip.fromJson(json);
+      expect(restored.song!.title, 'Every Wrong Turn');
+      expect(restored.song!.section('ch')!.lines, [
+        'Sing it back on the long road,',
+        'every wrong turn worth it.',
+      ]);
     });
   });
 }

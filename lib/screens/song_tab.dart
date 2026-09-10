@@ -9,6 +9,7 @@ import '../engines/song_synth_engine.dart';
 import '../engines/timeline_aligner.dart';
 import '../models/song_models.dart';
 import '../models/trip_models.dart';
+import '../services/trip_store.dart';
 import '../theme.dart';
 import '../widgets/brutal_widgets.dart';
 import '../widgets/highlight_reel_player.dart';
@@ -19,23 +20,47 @@ import 'share_memorial_screen.dart';
 /// with per-section rewrite/edit and the conversational refinement chat,
 /// and the Choose Sound pass: vibe & tempo picker, the making-song
 /// synthesis pass and the ready summary.
+///
+/// When [store] and [tripId] are provided (a created trip), the lyric draft
+/// is loaded from and saved to the store, so hand edits and rewrites survive
+/// screen changes and app restarts. Demo trips (no store) keep the draft in
+/// local state.
 class SongTab extends StatefulWidget {
   final String tripName;
   final List<TimelineMemory> memories;
   final List<String> participants;
+  final TripStore? store;
+  final String? tripId;
+
+  /// Invoked by the empty-trip prompt so the user can add the first memory.
+  /// When null the prompt is hidden and the tab only explains what is needed.
+  final VoidCallback? onAddMemory;
 
   const SongTab({
     Key? key,
     required this.tripName,
     required this.memories,
     required this.participants,
+    this.store,
+    this.tripId,
+    this.onAddMemory,
   }) : super(key: key);
 
   @override
   _SongTabState createState() => _SongTabState();
 }
 
-enum _SongStage { start, reading, lyrics, sound, making, ready, player, memorial }
+enum _SongStage {
+  start,
+  empty,
+  reading,
+  lyrics,
+  sound,
+  making,
+  ready,
+  player,
+  memorial,
+}
 
 class _SongTabState extends State<SongTab> {
   static const LyricistEngine _lyricist = TemplateLyricist();
@@ -67,6 +92,30 @@ class _SongTabState extends State<SongTab> {
   MusicalStyle? _style;
   int _bpm = 0;
   SongTimeline? _timeline;
+
+  @override
+  void initState() {
+    super.initState();
+    // A persisted draft (created trips) resumes exactly where the user left
+    // it: edits and rewrites survive screen changes and app restarts.
+    final LyricSong? saved = widget.store?.songFor(widget.tripId ?? '');
+    if (saved != null) {
+      _song = saved;
+      _stage = _SongStage.lyrics;
+    }
+  }
+
+  @override
+  void didUpdateWidget(SongTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The empty prompt sent the user to add memories; once the first memory
+    // lands, offer the song again instead of staying stuck on the prompt.
+    if (_stage == _SongStage.empty &&
+        oldWidget.memories.isEmpty &&
+        widget.memories.isNotEmpty) {
+      setState(() => _stage = _SongStage.start);
+    }
+  }
 
   // Reading pass.
   int _readingTick = 0;
@@ -108,6 +157,19 @@ class _SongTabState extends State<SongTab> {
   }
 
   Future<void> _startSong() async {
+    // A trip with no memories has nothing to sing about: prompt to add
+    // memories instead of generating placeholder nonsense.
+    if (widget.memories.isEmpty) {
+      setState(() => _stage = _SongStage.empty);
+      return;
+    }
+    await _compose();
+  }
+
+  /// Runs the reading pass and drafts a fresh song from the latest memories.
+  /// Used by the first "Write our song" action and by regeneration, so a
+  /// draft always reflects the newest content.
+  Future<void> _compose() async {
     setState(() {
       _stage = _SongStage.reading;
       _readingTick = 0;
@@ -127,7 +189,24 @@ class _SongTabState extends State<SongTab> {
         _song = song;
         _stage = _SongStage.lyrics;
       });
+      await _persistSong(song);
     });
+  }
+
+  /// Re-drafts the whole song from the latest memories, replacing the current
+  /// draft (and its persisted copy) so regeneration reflects new content.
+  Future<void> _regenerate() async {
+    if (_busyId != null || _song == null) return;
+    await _compose();
+  }
+
+  /// Saves the current draft through the store seam so edits and rewrites
+  /// survive restarts. Demo trips (no store) keep the draft in local state.
+  Future<void> _persistSong(LyricSong song) async {
+    final TripStore? store = widget.store;
+    final String? tripId = widget.tripId;
+    if (store == null || tripId == null) return;
+    await store.saveSong(tripId, song);
   }
 
   void _pickStyle(MusicalStyle style) {
@@ -193,10 +272,12 @@ class _SongTabState extends State<SongTab> {
     _busyTimer = Timer(_rewriteDuration, () async {
       final LyricSection rewritten = await _lyricist.rewriteSection(section);
       if (!mounted) return;
+      final LyricSong updated = _song!.withSection(rewritten.id, rewritten);
       setState(() {
         _busyId = null;
-        _song = _song!.withSection(rewritten.id, rewritten);
+        _song = updated;
       });
+      await _persistSong(updated);
     });
   }
 
@@ -219,16 +300,20 @@ class _SongTabState extends State<SongTab> {
         .map((String line) => line.trim())
         .where((String line) => line.isNotEmpty)
         .toList();
+    LyricSong? updated;
     setState(() {
       if (section != null && lines.isNotEmpty) {
         final List<List<String>> variants = [
           for (int i = 0; i < section.variants.length; i++)
             i == section.variantIndex ? lines : section.variants[i],
         ];
-        _song = _song!.withSection(id, section.copyWith(variants: variants));
+        updated = _song!.withSection(id, section.copyWith(variants: variants));
+        _song = updated;
       }
       _editingId = null;
     });
+    final LyricSong? saved = updated;
+    if (saved != null) _persistSong(saved);
   }
 
   void _cancelEdit() => setState(() => _editingId = null);
@@ -252,6 +337,7 @@ class _SongTabState extends State<SongTab> {
         _chat.add(ChatMessage(fromMe: false, text: reply.reply));
         _song = reply.song;
       });
+      await _persistSong(reply.song);
     });
   }
 
@@ -262,24 +348,25 @@ class _SongTabState extends State<SongTab> {
         Expanded(
           child: switch (_stage) {
             _SongStage.start => _buildStart(),
+            _SongStage.empty => _buildEmpty(),
             _SongStage.reading => _buildReading(),
             _SongStage.lyrics => _buildLyrics(),
             _SongStage.sound => _buildSound(),
             _SongStage.making => _buildMaking(),
             _SongStage.ready => _buildReady(),
             _SongStage.player => HighlightReelPlayer(
-                timeline: _timeline!,
-                memories: widget.memories,
-                onClose: () => setState(() => _stage = _SongStage.ready),
-                onShare: () => setState(() => _stage = _SongStage.memorial),
-              ),
+              timeline: _timeline!,
+              memories: widget.memories,
+              onClose: () => setState(() => _stage = _SongStage.ready),
+              onShare: () => setState(() => _stage = _SongStage.memorial),
+            ),
             _SongStage.memorial => ShareMemorialScreen(
-                tripName: widget.tripName,
-                timeline: _timeline!,
-                memories: widget.memories,
-                participants: widget.participants,
-                onBack: () => setState(() => _stage = _SongStage.ready),
-              ),
+              tripName: widget.tripName,
+              timeline: _timeline!,
+              memories: widget.memories,
+              participants: widget.participants,
+              onBack: () => setState(() => _stage = _SongStage.ready),
+            ),
           },
         ),
         if (_stage == _SongStage.lyrics) _buildChatBar(),
@@ -358,6 +445,66 @@ class _SongTabState extends State<SongTab> {
     );
   }
 
+  // ── Empty trip ────────────────────────────────────────────────────────────
+
+  Widget _buildEmpty() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 30, 28, 30),
+      child: Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Transform.rotate(
+                    angle: -6 * 3.14159 / 180,
+                    child: Text(
+                      '♪',
+                      style: GoogleFonts.karla(
+                        fontSize: 44,
+                        color: BrutalTheme.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'No memories yet',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.instrumentSerif(
+                      fontSize: 30,
+                      height: 1.15,
+                      color: BrutalTheme.inkBlack,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'A song needs your trip\'s moments — add a memory '
+                    'first, then come back and we\'ll write it together.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.karla(
+                      fontSize: 14,
+                      height: 1.6,
+                      color: const Color(0xFF6E5F4A),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(
+            width: double.infinity,
+            child: BrutalButton(
+              key: const ValueKey('empty-add-memory'),
+              onPressed: widget.onAddMemory,
+              child: Text('Add a memory', style: BrutalTheme.ctaLabelStyle()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Reading Memories ──────────────────────────────────────────────────────
 
   Widget _buildReading() {
@@ -406,12 +553,24 @@ class _SongTabState extends State<SongTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  song.title,
-                  style: GoogleFonts.instrumentSerif(
-                    fontSize: 30,
-                    color: BrutalTheme.inkBlack,
-                  ),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        song.title,
+                        style: GoogleFonts.instrumentSerif(
+                          fontSize: 30,
+                          color: BrutalTheme.inkBlack,
+                        ),
+                      ),
+                    ),
+                    _buildSectionChip(
+                      key: const ValueKey('regenerate-song'),
+                      label: '↻ regenerate',
+                      onTap: _regenerate,
+                    ),
+                  ],
                 ),
                 Text(
                   'draft 1 · $_memoryCountLine',
@@ -1029,7 +1188,11 @@ class _SongTabState extends State<SongTab> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
+                    const Icon(
+                      Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 24,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'Watch highlight reel',
@@ -1049,7 +1212,11 @@ class _SongTabState extends State<SongTab> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.card_giftcard, color: Colors.white, size: 20),
+                    const Icon(
+                      Icons.card_giftcard,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'Share memorial card',

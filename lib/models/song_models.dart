@@ -27,6 +27,28 @@ class LyricSection {
       variantIndex: variantIndex ?? this.variantIndex,
     );
   }
+
+  /// JSON round-trip used by the trip store so lyric drafts survive restarts.
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'label': label,
+      'variants': variants,
+      'variantIndex': variantIndex,
+    };
+  }
+
+  factory LyricSection.fromJson(Map<String, dynamic> json) {
+    return LyricSection(
+      id: json['id'] as String,
+      label: json['label'] as String,
+      variants: <List<String>>[
+        for (final List<dynamic> variant in json['variants'] as List<dynamic>)
+          <String>[for (final dynamic line in variant) line as String],
+      ],
+      variantIndex: json['variantIndex'] as int? ?? 0,
+    );
+  }
 }
 
 /// A generated lyric draft: title plus the ordered modular sections.
@@ -49,6 +71,27 @@ class LyricSong {
       title: title,
       sections: [
         for (final LyricSection s in sections) s.id == sectionId ? updated : s,
+      ],
+    );
+  }
+
+  /// JSON round-trip used by the trip store so lyric drafts survive restarts.
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'title': title,
+      'sections': <Map<String, dynamic>>[
+        for (final LyricSection section in sections) section.toJson(),
+      ],
+    };
+  }
+
+  factory LyricSong.fromJson(Map<String, dynamic> json) {
+    return LyricSong(
+      title: json['title'] as String,
+      sections: <LyricSection>[
+        for (final Map<String, dynamic> section
+            in json['sections'] as List<dynamic>)
+          LyricSection.fromJson(section),
       ],
     );
   }
