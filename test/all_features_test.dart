@@ -327,9 +327,9 @@ void main() {
         // 9. Making Song synthesis stage
         await tester.tap(find.byKey(const ValueKey('make-song')));
         await tester.pump();
-        expect(find.text('Tuning the guitars…'), findsOneWidget);
+        expect(find.text('Writing lyrics'), findsWidgets);
 
-        await tester.pump(const Duration(milliseconds: 3400));
+        await tester.pump(const Duration(milliseconds: 4500));
         await tester.pumpAndSettle();
 
         // 10. Song Ready stage with Play and Share
@@ -1363,10 +1363,7 @@ void main() {
 
       // Empty state: brutalist hint that pinning a place adds a stop.
       expect(find.text('0 stops'), findsOneWidget);
-      expect(
-        find.textContaining('No pinned places yet'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('No pinned places yet'), findsOneWidget);
       expect(find.textContaining('Pin a place to a memory'), findsOneWidget);
 
       // The route surface is fully offline: no HTTP requests at all.

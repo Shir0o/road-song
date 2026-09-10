@@ -443,4 +443,66 @@ void main() {
       ]);
     });
   });
+
+  group('TripStore song artifact seam', () {
+    const SongArtifact kArtifact = SongArtifact(
+      styleId: 'pop-punk',
+      audioAsset: 'audio/vibes/pop_punk.mp3',
+      bpm: 168,
+      stageIndex: 4,
+    );
+
+    test('songArtifactFor is null until an artifact is saved', () async {
+      final store = InMemoryTripStore(trips: [sampleTrip]);
+      expect(store.songArtifactFor('trip-101'), isNull);
+      expect(store.songArtifactFor('missing-trip'), isNull);
+    });
+
+    test('saveSongArtifact replaces the previous artifact', () async {
+      final store = InMemoryTripStore(trips: [sampleTrip]);
+      await store.saveSongArtifact('trip-101', kArtifact);
+      final SongArtifact? saved = store.songArtifactFor('trip-101');
+      expect(saved!.styleId, 'pop-punk');
+      expect(saved.audioAsset, 'audio/vibes/pop_punk.mp3');
+      expect(saved.bpm, 168);
+      expect(saved.isUnlocked, isTrue);
+
+      await store.saveSongArtifact(
+        'trip-101',
+        const SongArtifact(
+          styleId: 'sad-boy-indie',
+          audioAsset: 'audio/vibes/sad_boy_indie.mp3',
+          bpm: 92,
+          stageIndex: 4,
+        ),
+      );
+      expect(store.songArtifactFor('trip-101')!.styleId, 'sad-boy-indie');
+    });
+
+    test('a song artifact survives a PreferencesTripStore restart', () async {
+      SharedPreferences.setMockInitialValues({});
+      final store1 = PreferencesTripStore();
+      await store1.init();
+      await store1.addTrip(sampleTrip);
+      await store1.saveSongArtifact('trip-101', kArtifact);
+
+      final store2 = PreferencesTripStore();
+      await store2.init();
+      final SongArtifact? restored = store2.songArtifactFor('trip-101');
+      expect(restored, isNotNull);
+      expect(restored!.styleId, 'pop-punk');
+      expect(restored.audioAsset, 'audio/vibes/pop_punk.mp3');
+      expect(restored.bpm, 168);
+      expect(restored.stageIndex, 4);
+    });
+
+    test('a song artifact round-trips through Trip JSON', () async {
+      final json = sampleTrip.copyWith(songArtifact: kArtifact).toJson();
+      final restored = Trip.fromJson(json);
+      expect(restored.songArtifact!.styleId, 'pop-punk');
+      expect(restored.songArtifact!.audioAsset, 'audio/vibes/pop_punk.mp3');
+      expect(restored.songArtifact!.bpm, 168);
+      expect(restored.songArtifact!.stageIndex, 4);
+    });
+  });
 }

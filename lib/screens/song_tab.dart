@@ -9,6 +9,7 @@ import '../engines/song_synth_engine.dart';
 import '../engines/timeline_aligner.dart';
 import '../models/song_models.dart';
 import '../models/trip_models.dart';
+import '../services/audio_seam.dart';
 import '../services/trip_store.dart';
 import '../theme.dart';
 import '../widgets/brutal_widgets.dart';
@@ -32,6 +33,11 @@ class SongTab extends StatefulWidget {
   final TripStore? store;
   final String? tripId;
 
+  /// The audio seam for vibe auditions and song playback. Tests inject a
+  /// fake so CI never touches a real codec; production defaults to
+  /// audioplayers-backed playback.
+  final AudioSeam? audioSeam;
+
   /// Invoked by the empty-trip prompt so the user can add the first memory.
   /// When null the prompt is hidden and the tab only explains what is needed.
   final VoidCallback? onAddMemory;
@@ -43,6 +49,7 @@ class SongTab extends StatefulWidget {
     required this.participants,
     this.store,
     this.tripId,
+    this.audioSeam,
     this.onAddMemory,
   }) : super(key: key);
 
@@ -58,6 +65,7 @@ enum _SongStage {
   sound,
   making,
   ready,
+  play,
   player,
   memorial,
 }
@@ -74,13 +82,6 @@ class _SongTabState extends State<SongTab> {
     'Rhyming the place names…',
     'Saving the quiet moments for the bridge…',
   ];
-  static const List<String> _makingMessages = [
-    'Tuning the guitars…',
-    'Recording the vocals…',
-    'Syncing every syllable…',
-    'Stamping the evidence cues…',
-  ];
-  static const Duration _makingDuration = Duration(milliseconds: 3200);
   static const Duration _readingDuration = Duration(milliseconds: 3200);
   static const Duration _messageInterval = Duration(milliseconds: 800);
   static const Duration _rewriteDuration = Duration(milliseconds: 950);
@@ -92,6 +93,8 @@ class _SongTabState extends State<SongTab> {
   MusicalStyle? _style;
   int _bpm = 0;
   SongTimeline? _timeline;
+  // The audio seam: production plays bundled MP3s; tests inject a fake.
+  late final AudioSeam _audio = widget.audioSeam ?? AudioplayersAudioSeam();
 
   @override
   void initState() {
@@ -103,6 +106,29 @@ class _SongTabState extends State<SongTab> {
       _song = saved;
       _stage = _SongStage.lyrics;
     }
+    // A finished-memorial artifact resumes the unlocked song: the vibe is
+    // pre-selected and the Making Song pass is already complete, so the
+    // user lands on the ready stage (lyrics stay one tap away).
+    final SongArtifact? artifact = widget.store?.songArtifactFor(
+      widget.tripId ?? '',
+    );
+    if (artifact != null) {
+      _style = artifact.style;
+      _bpm = artifact.bpm;
+      if (_song != null) {
+        _stage = _SongStage.ready;
+        _resumeTimeline();
+      }
+    }
+  }
+
+  /// Rebuilds the alignment timeline after a restart so the ready screen and
+  /// the highlight reel work without re-running the Making Song pass.
+  Future<void> _resumeTimeline() async {
+    if (_song == null || _style == null) return;
+    final SongTimeline timeline = await _alignTimeline(_song!, _style!, _bpm);
+    if (!mounted) return;
+    setState(() => _timeline = timeline);
   }
 
   @override
@@ -121,8 +147,8 @@ class _SongTabState extends State<SongTab> {
   int _readingTick = 0;
   Timer? _rotationTimer;
   Timer? _readingTimer;
-  // Making-song pass.
-  int _makingTick = 0;
+  // Making-song pass: the current stage index and the timer that advances it.
+  int _makingStageIndex = 0;
   Timer? _makingTimer;
 
   // Section rewriting / editing.
@@ -146,6 +172,12 @@ class _SongTabState extends State<SongTab> {
     _typingTimer?.cancel();
     _editController.dispose();
     _chatController.dispose();
+    // Release the audio player so no audition keeps playing after the tab
+    // is left. The seam is only disposed when this state owns it.
+    if (widget.audioSeam == null) {
+      final AudioSeam audio = _audio;
+      if (audio is AudioplayersAudioSeam) audio.dispose();
+    }
     super.dispose();
   }
 
@@ -214,26 +246,70 @@ class _SongTabState extends State<SongTab> {
       _style = style;
       _bpm = style.defaultBpm;
     });
+    // Audition the vibe through the audio seam: each vibe plays its own
+    // bundled track, so the choice is informed before committing.
+    _audio.prime(style.audioAsset);
+    _audio.start();
   }
 
+  /// Runs the staged Making Song pass: each stage shows in order with
+  /// credible timing, the vibe's audio is primed during the pass (so the
+  /// audible start on web can derive from a later tap), and the song is
+  /// unlocked when the pass completes.
   Future<void> _makeSong() async {
     if (_style == null || _song == null) return;
     setState(() {
       _stage = _SongStage.making;
-      _makingTick = 0;
+      _makingStageIndex = 0;
     });
-    _makingTimer = Timer.periodic(_messageInterval, (_) {
-      if (mounted) setState(() => _makingTick++);
-    });
-    Timer(_makingDuration, () async {
-      _makingTimer?.cancel();
-      final SongTimeline timeline = await _alignTimeline(_song!, _style!, _bpm);
+    // Prime the chosen vibe's audio while the pass runs: loading is allowed
+    // anytime and makes no sound; the audible start is gated on a tap.
+    _audio.prime(_style!.audioAsset);
+    _advanceMakingStage();
+  }
+
+  /// Advances the Making Song pass one stage at a time, persisting the
+  /// artifact (with its stage state) after each step so an interrupted pass
+  /// resumes where it left off. The final step unlocks the song.
+  void _advanceMakingStage() {
+    final int stageIndex = _makingStageIndex;
+    if (stageIndex >= MakingSongStage.stages.length) return;
+    _makingTimer = Timer(MakingSongStage.stageDurations[stageIndex], () async {
       if (!mounted) return;
-      setState(() {
-        _timeline = timeline;
-        _stage = _SongStage.ready;
-      });
+      final int next = stageIndex + 1;
+      setState(() => _makingStageIndex = next);
+      await _persistArtifact(next);
+      if (next >= MakingSongStage.stages.length) {
+        final SongTimeline timeline = await _alignTimeline(
+          _song!,
+          _style!,
+          _bpm,
+        );
+        if (!mounted) return;
+        setState(() {
+          _timeline = timeline;
+          _stage = _SongStage.ready;
+        });
+      } else {
+        _advanceMakingStage();
+      }
     });
+  }
+
+  /// Persists the song artifact (vibe, audio asset, stage state) through the
+  /// store seam so the unlocked song and in-progress passes survive
+  /// restarts. Demo trips (no store) keep the artifact in local state.
+  Future<void> _persistArtifact(int stageIndex) async {
+    final TripStore? store = widget.store;
+    final String? tripId = widget.tripId;
+    if (store == null || tripId == null || _style == null) return;
+    final SongArtifact artifact = SongArtifact(
+      styleId: _style!.id,
+      audioAsset: _style!.audioAsset,
+      bpm: _bpm,
+      stageIndex: stageIndex,
+    );
+    await store.saveSongArtifact(tripId, artifact);
   }
 
   /// Runs the full synthesis pipeline: vocal take, forced alignment against
@@ -354,6 +430,7 @@ class _SongTabState extends State<SongTab> {
             _SongStage.sound => _buildSound(),
             _SongStage.making => _buildMaking(),
             _SongStage.ready => _buildReady(),
+            _SongStage.play => _buildPlay(),
             _SongStage.player => HighlightReelPlayer(
               timeline: _timeline!,
               memories: widget.memories,
@@ -948,6 +1025,22 @@ class _SongTabState extends State<SongTab> {
                 onChanged: (double value) =>
                     setState(() => _bpm = value.round()),
               ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: BrutalButton(
+                  key: const ValueKey('audition-vibe'),
+                  color: const Color(0xFF5A4938),
+                  onPressed: () {
+                    _audio.prime(_style!.audioAsset);
+                    _audio.start();
+                  },
+                  child: Text(
+                    '♪ Play the ${_style!.label} preview',
+                    style: BrutalTheme.ctaLabelStyle(),
+                  ),
+                ),
+              ),
             ],
             const SizedBox(height: 14),
             SizedBox(
@@ -1073,18 +1166,21 @@ class _SongTabState extends State<SongTab> {
   }
 
   Widget _buildMaking() {
-    final String message =
-        _makingMessages[_makingTick % _makingMessages.length];
+    final int stageIndex = _makingStageIndex.clamp(
+      0,
+      MakingSongStage.stages.length - 1,
+    );
+    final MakingSongStage current = MakingSongStage.stages[stageIndex];
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildBeatDots(_makingTick),
+            _buildBeatDots(stageIndex),
             const SizedBox(height: 22),
             Text(
-              message,
+              current.label,
               textAlign: TextAlign.center,
               style: GoogleFonts.caveat(
                 fontSize: 27,
@@ -1093,15 +1189,84 @@ class _SongTabState extends State<SongTab> {
             ),
             const SizedBox(height: 14),
             Text(
-              'RECORDING $_bpm BPM ${_style!.label.toUpperCase()}',
+              'MAKING ${_style!.label.toUpperCase()} AT $_bpm BPM',
               style: GoogleFonts.spaceMono(
                 fontSize: 10,
                 letterSpacing: 1.4,
                 color: const Color(0xFFB3A488),
               ),
             ),
+            const SizedBox(height: 20),
+            for (int i = 0; i < MakingSongStage.stages.length; i++)
+              _buildStageRow(i, stageIndex),
           ],
         ),
+      ),
+    );
+  }
+
+  /// One row of the Making Song stage list: done stages are checked, the
+  /// current stage pulses, upcoming stages stay muted.
+  Widget _buildStageRow(int index, int currentIndex) {
+    final MakingSongStage stage = MakingSongStage.stages[index];
+    final bool done = index < currentIndex;
+    final bool current = index == currentIndex;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 18,
+            height: 18,
+            decoration: BoxDecoration(
+              color: done
+                  ? BrutalTheme.primary
+                  : current
+                  ? BrutalTheme.card
+                  : Colors.transparent,
+              border: Border.all(
+                color: done
+                    ? BrutalTheme.primary
+                    : current
+                    ? BrutalTheme.primary
+                    : const Color(0xFFDCCDAC),
+              ),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            alignment: Alignment.center,
+            child: done
+                ? Text(
+                    '✓',
+                    style: GoogleFonts.karla(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFFFFF8EC),
+                    ),
+                  )
+                : current
+                ? Container(
+                    width: 6,
+                    height: 6,
+                    decoration: const BoxDecoration(
+                      color: BrutalTheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 10),
+          Text(
+            stage.label,
+            style: GoogleFonts.karla(
+              fontSize: 14,
+              fontWeight: current ? FontWeight.bold : FontWeight.w400,
+              color: done || current
+                  ? BrutalTheme.inkBlack
+                  : const Color(0xFFB3A488),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1109,7 +1274,20 @@ class _SongTabState extends State<SongTab> {
   // ── Ready ─────────────────────────────────────────────────────────────────
 
   Widget _buildReady() {
-    final SongTimeline timeline = _timeline!;
+    final SongTimeline? timeline = _timeline;
+    // After a restart the timeline is rebuilt in the background; show a
+    // brief loading state instead of a blank screen.
+    if (timeline == null) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: Text(
+            'Loading your song…',
+            style: TextStyle(color: Color(0xFF8D7C63)),
+          ),
+        ),
+      );
+    }
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(24, 24, 24, 30),
@@ -1180,6 +1358,33 @@ class _SongTabState extends State<SongTab> {
                 ),
             ],
             const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: BrutalButton(
+                key: const ValueKey('play-song'),
+                onPressed: () {
+                  // The audible start derives from this tap: the source was
+                  // primed during the Making Song pass, so the gesture is
+                  // gesture-proximate on web (iOS Safari otherwise blocks it).
+                  _audio.prime(_style!.audioAsset);
+                  _audio.start();
+                  setState(() => _stage = _SongStage.play);
+                },
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 8),
+                    Text('Play the song', style: BrutalTheme.ctaLabelStyle()),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
               child: BrutalButton(
@@ -1266,6 +1471,82 @@ class _SongTabState extends State<SongTab> {
               fontSize: 12,
               fontWeight: FontWeight.bold,
               color: BrutalTheme.inkBlack,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Song playing ──────────────────────────────────────────────────────────
+
+  /// The unlocked song playing through the audio seam. The audible start
+  /// derived from the tap that entered this stage (web autoplay policy);
+  /// the controls here let the listener stop and restart it.
+  Widget _buildPlay() {
+    final MusicalStyle style = _style!;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 30),
+      child: Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Transform.rotate(
+                    angle: -6 * 3.14159 / 180,
+                    child: Text(
+                      '♪',
+                      style: GoogleFonts.karla(
+                        fontSize: 44,
+                        color: BrutalTheme.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _song?.title ?? 'Your song',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.instrumentSerif(
+                      fontSize: 30,
+                      color: BrutalTheme.inkBlack,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${style.label} · $_bpm BPM',
+                    style: GoogleFonts.caveat(
+                      fontSize: 19,
+                      color: BrutalTheme.graphite,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'playing through the audio seam',
+                    style: GoogleFonts.spaceMono(
+                      fontSize: 10,
+                      letterSpacing: 1.2,
+                      color: const Color(0xFFB3A488),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          SizedBox(
+            width: double.infinity,
+            child: BrutalButton(
+              key: const ValueKey('stop-song'),
+              color: const Color(0xFF5A4938),
+              onPressed: () {
+                _audio.stop();
+                setState(() => _stage = _SongStage.ready);
+              },
+              child: Text(
+                'Stop and go back',
+                style: BrutalTheme.ctaLabelStyle(),
+              ),
             ),
           ),
         ],

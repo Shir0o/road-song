@@ -136,6 +136,12 @@ class Trip {
   /// has been written once.
   final LyricSong? song;
 
+  /// The finished-memorial artifact (vibe, audio asset, Making Song stage
+  /// state), persisted with the trip so the unlocked song survives restarts.
+  /// Null until a sound has been chosen. Remaking replaces this and keeps
+  /// [song].
+  final SongArtifact? songArtifact;
+
   const Trip({
     required this.id,
     required this.name,
@@ -147,6 +153,7 @@ class Trip {
     required this.createdAt,
     this.memories = const [],
     this.song,
+    this.songArtifact,
   });
 
   String get dateRange => '$firstDay – $lastDay';
@@ -173,6 +180,7 @@ class Trip {
     DateTime? createdAt,
     List<TimelineMemory>? memories,
     LyricSong? song,
+    SongArtifact? songArtifact,
   }) {
     return Trip(
       id: id ?? this.id,
@@ -185,6 +193,7 @@ class Trip {
       createdAt: createdAt ?? this.createdAt,
       memories: memories ?? this.memories,
       song: song ?? this.song,
+      songArtifact: songArtifact ?? this.songArtifact,
     );
   }
 
@@ -200,6 +209,7 @@ class Trip {
       'createdAt': createdAt.toIso8601String(),
       'memories': memories.map((m) => m.toJson()).toList(),
       'song': song?.toJson(),
+      'songArtifact': songArtifact?.toJson(),
     };
   }
 
@@ -229,6 +239,9 @@ class Trip {
       song: json['song'] == null
           ? null
           : LyricSong.fromJson(json['song'] as Map<String, dynamic>),
+      songArtifact: json['songArtifact'] == null
+          ? null
+          : SongArtifact.fromJson(json['songArtifact'] as Map<String, dynamic>),
     );
   }
 }

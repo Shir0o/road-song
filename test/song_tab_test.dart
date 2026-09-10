@@ -346,13 +346,21 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('make-song')));
     await tester.pump();
 
-    // Making-song pass with rotating messages and the chosen take metadata.
-    expect(find.text('Tuning the guitars…'), findsOneWidget);
-    expect(find.text('RECORDING 168 BPM POP-PUNK'), findsOneWidget);
-    await tester.pump(const Duration(milliseconds: 800));
-    expect(find.text('Recording the vocals…'), findsOneWidget);
+    // Making-song pass: the decided stages show in order with credible
+    // timing, starting with the first stage.
+    expect(find.text('Writing lyrics'), findsWidgets);
+    expect(find.text('MAKING POP-PUNK AT 168 BPM'), findsOneWidget);
+    expect(find.text('Arranging music'), findsOneWidget);
+    expect(find.text('Mixing'), findsOneWidget);
+    expect(find.text('Mastering'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1200));
+    expect(find.text('Arranging music'), findsWidgets);
+    await tester.pump(const Duration(milliseconds: 1200));
+    expect(find.text('Mixing'), findsWidgets);
+    await tester.pump(const Duration(milliseconds: 1000));
+    expect(find.text('Mastering'), findsWidgets);
 
-    await tester.pump(const Duration(milliseconds: 2600));
+    await tester.pump(const Duration(milliseconds: 1000));
     await tester.pump();
 
     expect(find.text('Your song is ready!'), findsOneWidget);
@@ -386,7 +394,10 @@ void main() {
     await tester.pump();
 
     expect(find.text('60 FPS'), findsOneWidget);
-    expect(find.byKey(const ValueKey('reel-play-pause-button')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('reel-play-pause-button')),
+      findsOneWidget,
+    );
 
     // Share from player launches memorial screen
     await tester.tap(find.byKey(const ValueKey('reel-share-button')));

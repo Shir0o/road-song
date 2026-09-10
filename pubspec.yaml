@@ -64,6 +64,12 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Bundled vibe-audition audio (issue #29): one synthesized MP3 per vibe,
+  # played through audioplayers AssetSource on iOS, Android and web. See
+  # assets/audio/vibes/PROVENANCE.md for provenance and regeneration.
+  assets:
+    - assets/audio/vibes/
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

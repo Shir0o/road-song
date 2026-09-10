@@ -39,6 +39,15 @@ abstract class TripStore extends ChangeNotifier {
   /// Persists [song] as the lyric draft of [tripId], replacing any previous
   /// draft. Hand edits and rewrites survive restarts through this seam.
   Future<void> saveSong(String tripId, LyricSong song);
+
+  /// The finished-memorial artifact for [tripId] (vibe, audio asset, Making
+  /// Song stage state), or null when the sound has not been chosen yet.
+  SongArtifact? songArtifactFor(String tripId);
+
+  /// Persists [artifact] as the song artifact of [tripId], replacing any
+  /// previous one. Remaking with a different vibe replaces the audio while
+  /// the lyrics (saved via [saveSong]) are kept.
+  Future<void> saveSongArtifact(String tripId, SongArtifact artifact);
 }
 
 /// Fast, in-memory implementation of [TripStore] for tests and transient
@@ -165,6 +174,21 @@ class InMemoryTripStore extends ChangeNotifier implements TripStore {
     final int index = _trips.indexWhere((t) => t.id == tripId);
     if (index == -1) return;
     _trips[index] = _trips[index].copyWith(song: song);
+    notifyListeners();
+  }
+
+  @override
+  SongArtifact? songArtifactFor(String tripId) {
+    final int index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return null;
+    return _trips[index].songArtifact;
+  }
+
+  @override
+  Future<void> saveSongArtifact(String tripId, SongArtifact artifact) async {
+    final int index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return;
+    _trips[index] = _trips[index].copyWith(songArtifact: artifact);
     notifyListeners();
   }
 }
@@ -323,6 +347,23 @@ class PreferencesTripStore extends ChangeNotifier implements TripStore {
     final int index = _trips.indexWhere((t) => t.id == tripId);
     if (index == -1) return;
     _trips[index] = _trips[index].copyWith(song: song);
+    await _persist();
+    notifyListeners();
+  }
+
+  @override
+  SongArtifact? songArtifactFor(String tripId) {
+    final int index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return null;
+    return _trips[index].songArtifact;
+  }
+
+  @override
+  Future<void> saveSongArtifact(String tripId, SongArtifact artifact) async {
+    if (!_initialized) await init();
+    final int index = _trips.indexWhere((t) => t.id == tripId);
+    if (index == -1) return;
+    _trips[index] = _trips[index].copyWith(songArtifact: artifact);
     await _persist();
     notifyListeners();
   }
