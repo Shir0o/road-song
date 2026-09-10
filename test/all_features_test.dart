@@ -464,7 +464,9 @@ void main() {
         await store2.init();
         expect(store2.trips.length, 1);
 
-        await tester.pumpWidget(RoadSongApp(key: const ValueKey('restart-app'), tripStore: store2));
+        await tester.pumpWidget(
+          RoadSongApp(key: const ValueKey('restart-app'), tripStore: store2),
+        );
         await tester.pumpAndSettle();
 
         // Welcome screen shows Resume trip button for active trip
@@ -863,6 +865,346 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Survives the restart.'), findsOneWidget);
+    });
+  });
+
+  group('Diary Feed & Reading View Tests', () {
+    /// 1x1 transparent PNG — a decodable photo fixture.
+    const List<int> kFeedPng = [
+      0x89,
+      0x50,
+      0x4E,
+      0x47,
+      0x0D,
+      0x0A,
+      0x1A,
+      0x0A,
+      0x00,
+      0x00,
+      0x00,
+      0x0D,
+      0x49,
+      0x48,
+      0x44,
+      0x52,
+      0x00,
+      0x00,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      0x00,
+      0x01,
+      0x08,
+      0x06,
+      0x00,
+      0x00,
+      0x00,
+      0x1F,
+      0x15,
+      0xC4,
+      0x89,
+      0x00,
+      0x00,
+      0x00,
+      0x0A,
+      0x49,
+      0x44,
+      0x41,
+      0x54,
+      0x78,
+      0x9C,
+      0x63,
+      0x00,
+      0x01,
+      0x00,
+      0x00,
+      0x05,
+      0x00,
+      0x01,
+      0x0D,
+      0x0A,
+      0x2D,
+      0xB4,
+      0x00,
+      0x00,
+      0x00,
+      0x00,
+      0x49,
+      0x45,
+      0x4E,
+      0x44,
+      0xAE,
+      0x42,
+      0x60,
+      0x82,
+    ];
+
+    final Trip feedTrip = Trip(
+      id: 'trip-feed',
+      name: 'Feed Trip',
+      firstDay: 'JUN 12',
+      lastDay: 'JUN 18',
+      coverIndex: 1,
+      crew: const [],
+      sessionLink: 'roadsong.app/t/feed-trip',
+      createdAt: DateTime(2026, 6, 12),
+    );
+
+    TimelineMemory feedMemory(
+      String id, {
+      required int day,
+      required DateTime createdAt,
+      required String text,
+      String contributor = 'You',
+      String caption = '',
+    }) {
+      return TimelineMemory(
+        id: id,
+        author: '@you',
+        contributor: contributor,
+        time: '10:00 AM',
+        text: text,
+        caption: caption,
+        createdAt: createdAt,
+        day: day,
+        dayDate: 'JUN ${day + 11}',
+      );
+    }
+
+    MemoryMediaPickers feedPickers() => MemoryMediaPickers(
+      photoFromGallery: () async => Uint8List.fromList(kFeedPng),
+      photoFromCamera: () async => Uint8List.fromList(kFeedPng),
+      videoClip: () async => Uint8List.fromList(const [1, 2, 3]),
+    );
+
+    Future<InMemoryTripStore> pumpFeedApp(
+      WidgetTester tester, {
+      required List<TimelineMemory> memories,
+    }) async {
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final store = InMemoryTripStore(
+        trips: [feedTrip.copyWith(memories: memories)],
+        activeTripId: feedTrip.id,
+      );
+      await tester.pumpWidget(
+        RoadSongApp(tripStore: store, mediaPickers: feedPickers()),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Resume trip'));
+      await tester.pumpAndSettle();
+      return store;
+    }
+
+    testWidgets('diary lists memories chronologically with day grouping', (
+      tester,
+    ) async {
+      // Preset out of order: the day-2 memory was created before the day-1
+      // ones, the day-1 pair is reversed, and one fixture carries no
+      // createdAt at all (canned-fixture style) so it sorts by display time.
+      await pumpFeedApp(
+        tester,
+        memories: [
+          feedMemory(
+            'm-late',
+            day: 2,
+            createdAt: DateTime(2026, 6, 13, 9),
+            text: 'Day two note.',
+          ),
+          const TimelineMemory(
+            id: 'm-fixture',
+            author: '@tom',
+            contributor: 'Tom',
+            time: '09:00 AM',
+            text: 'Canned fixture note.',
+            day: 1,
+            dayDate: 'JUN 12',
+          ),
+          feedMemory(
+            'm-early',
+            day: 1,
+            createdAt: DateTime(2026, 6, 12, 8),
+            text: 'Day one note.',
+            contributor: 'Maya',
+          ),
+          feedMemory(
+            'm-mid',
+            day: 1,
+            createdAt: DateTime(2026, 6, 12, 12),
+            text: 'Day one later note.',
+            caption: 'the tram ride',
+          ),
+        ],
+      );
+
+      // Day grouping from the memory day/dayDate fields.
+      expect(find.text('Day 1'), findsOneWidget);
+      expect(find.text('Day 2'), findsOneWidget);
+
+      // Chronological order on screen: earliest first, latest last. The
+      // createdAt-less fixture sorts after every dated memory (dated entries
+      // always precede undated ones), so it lands at the end of Day 1, before
+      // the Day 2 memory.
+      final double fixtureY = tester
+          .getTopLeft(find.byKey(const ValueKey('memory-m-fixture')))
+          .dy;
+      final double earlyY = tester
+          .getTopLeft(find.byKey(const ValueKey('memory-m-early')))
+          .dy;
+      final double midY = tester
+          .getTopLeft(find.byKey(const ValueKey('memory-m-mid')))
+          .dy;
+      final double lateY = tester
+          .getTopLeft(find.byKey(const ValueKey('memory-m-late')))
+          .dy;
+      expect(earlyY, lessThan(midY));
+      expect(midY, lessThan(fixtureY));
+      expect(fixtureY, lessThan(lateY));
+
+      // Contributor and caption are visible per entry.
+      expect(find.text('Maya'), findsOneWidget);
+      expect(find.text('Tom'), findsOneWidget);
+      expect(find.text('the tram ride'), findsOneWidget);
+    });
+
+    testWidgets('empty trip shows the designed empty state with add-memory '
+        'affordance', (tester) async {
+      await pumpFeedApp(tester, memories: const []);
+
+      expect(find.text('No memories yet.'), findsOneWidget);
+      await tester.tap(find.text('ADD A MEMORY'));
+      await tester.pumpAndSettle();
+      expect(find.text('Add a memory'), findsOneWidget);
+    });
+
+    testWidgets('opening a memory shows the reader and back restores the '
+        'scroll position', (tester) async {
+      final List<TimelineMemory> memories = [
+        for (int i = 0; i < 16; i++)
+          feedMemory(
+            'm-$i',
+            day: (i ~/ 4) + 1,
+            createdAt: DateTime(2026, 6, 12 + (i ~/ 4), 8 + i),
+            text:
+                'Note number $i — a memory body long enough to wrap across '
+                'several lines so the feed grows tall enough to scroll.',
+          ),
+      ];
+      await pumpFeedApp(tester, memories: memories);
+
+      // Scroll deep into the feed so the top of the list leaves the viewport.
+      final Finder diaryScrollable = find.descendant(
+        of: find.byKey(const ValueKey('diary-feed')),
+        matching: find.byType(Scrollable),
+      );
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('memory-m-12')),
+        200,
+        scrollable: diaryScrollable,
+      );
+      await tester.pumpAndSettle();
+
+      final double offsetBefore = tester
+          .widget<ListView>(find.byKey(const ValueKey('diary-feed')))
+          .controller!
+          .offset;
+      expect(offsetBefore, greaterThan(0));
+
+      // Open the memory: full-screen reader with the memory's own content.
+      await tester.tap(find.byKey(const ValueKey('memory-m-12')));
+      await tester.pumpAndSettle();
+      expect(find.text('MEMORY'), findsOneWidget);
+      expect(
+        find.text(
+          'Note number 12 — a memory body long enough to wrap '
+          'across several lines so the feed grows tall enough to scroll.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('You'), findsOneWidget);
+
+      // Back returns to the same scroll position.
+      await tester.tap(find.byKey(const ValueKey('reader-back')));
+      await tester.pumpAndSettle();
+      final double offsetAfter = tester
+          .widget<ListView>(find.byKey(const ValueKey('diary-feed')))
+          .controller!
+          .offset;
+      expect(offsetAfter, offsetBefore);
+    });
+
+    testWidgets('reader renders photo and video media full-screen', (
+      tester,
+    ) async {
+      final photoMemory = feedMemory(
+        'm-photo',
+        day: 1,
+        createdAt: DateTime(2026, 6, 12, 8),
+        text: 'The churro incident.',
+        caption: 'churro oclock',
+      ).copyWith(photoBytes: Uint8List.fromList(kFeedPng));
+      final videoMemory = feedMemory(
+        'm-video',
+        day: 1,
+        createdAt: DateTime(2026, 6, 12, 12),
+        text: 'Tram 28, all of us.',
+        caption: 'the tram ride',
+      ).copyWith(videoBytes: Uint8List.fromList(List.filled(4096, 7)));
+      final networkPhoto = feedMemory(
+        'm-net',
+        day: 1,
+        createdAt: DateTime(2026, 6, 12, 14),
+        text: 'Remote photo memory.',
+        caption: 'from the web',
+      ).copyWith(imageUrl: 'https://example.com/remote.jpg');
+      final textMemory = feedMemory(
+        'm-text',
+        day: 1,
+        createdAt: DateTime(2026, 6, 12, 16),
+        text: 'Lore only, no media.',
+        caption: 'the inside joke',
+      );
+      await pumpFeedApp(
+        tester,
+        memories: [photoMemory, videoMemory, networkPhoto, textMemory],
+      );
+
+      // Photo memory: reader shows the polaroid with its caption.
+      await tester.tap(find.byKey(const ValueKey('memory-m-photo')));
+      await tester.pumpAndSettle();
+      expect(find.text('MEMORY'), findsOneWidget);
+      expect(find.byType(Image), findsOneWidget);
+      expect(find.text('churro oclock'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('reader-back')));
+      await tester.pumpAndSettle();
+
+      // Video memory: reader shows the clip tile with its caption.
+      await tester.tap(find.byKey(const ValueKey('memory-m-video')));
+      await tester.pumpAndSettle();
+      expect(find.text('SHORT CLIP'), findsOneWidget);
+      expect(find.text('the tram ride'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('reader-back')));
+      await tester.pumpAndSettle();
+
+      // Remote-photo memory: reader renders the network image.
+      await tester.tap(find.byKey(const ValueKey('memory-m-net')));
+      await tester.pumpAndSettle();
+      expect(find.text('from the web'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('reader-back')));
+      await tester.pumpAndSettle();
+
+      // Text memory: reader shows the lore body and its caption.
+      await tester.tap(find.byKey(const ValueKey('memory-m-text')));
+      await tester.pumpAndSettle();
+      expect(find.text('Lore only, no media.'), findsOneWidget);
+      expect(find.text('the inside joke'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('reader-back')));
+      await tester.pumpAndSettle();
+      expect(find.text('MEMORY'), findsNothing);
     });
   });
 
