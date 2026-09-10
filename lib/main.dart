@@ -4,6 +4,7 @@ import 'theme.dart';
 import 'models/trip_models.dart';
 import 'services/audio_seam.dart';
 import 'services/remote_trip_store.dart';
+import 'services/sample_trip.dart';
 import 'services/session_ingestion_service.dart';
 import 'services/trip_link_sharer.dart';
 import 'screens/guest_portal_screen.dart';
@@ -161,6 +162,15 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
 
   void _goToCreate() => setState(() => _step = 1);
 
+  /// Loads the pre-populated sample trip (issue #31) through the store seam
+  /// and lands on the trip hub, so the full arc — diary, route, lyrics,
+  /// Making Song, player, share — is demoable immediately.
+  Future<void> _loadSampleTrip() async {
+    await _tripStore.addTrip(buildSampleTrip());
+    if (!mounted) return;
+    setState(() => _step = 3);
+  }
+
   void _goToInvite(TripDraft draft) {
     setState(() {
       _draft = draft;
@@ -219,6 +229,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
       default:
         return WelcomeScreen(
           onStart: _goToCreate,
+          onLoadSample: _tripStore.trips.isEmpty ? _loadSampleTrip : null,
           hasActiveTrip: _tripStore.trips.isNotEmpty,
           onResume: _resumeTrip,
         );
